@@ -35,5 +35,5 @@ class Parser:
 #         with open(self.selected, "r") as f:
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     Parser.select_file()
