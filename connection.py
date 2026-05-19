@@ -1,11 +1,11 @@
 from zone import Zone
+from pydantic import BaseModel, Field
 
 
-class Connection:
+class Connection(BaseModel):
     origin: Zone
     to: Zone
-    capacity: int
-
+    max_link_capacity: int = Field(default=1, ge=1)
 
 # nb_drones: 5
 
