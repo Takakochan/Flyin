@@ -1,7 +1,8 @@
 from zone import Zone
 from connection import Connection
+from pydantic import BaseModel
 
-class Graph:
+class Graph(BaseModel):
 	zones: dict[str, Zone]
 	connections: list[Connection]
 
