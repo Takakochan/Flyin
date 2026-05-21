@@ -1,4 +1,4 @@
-MAIN_PROGRAM := main.py
+MAIN_PROGRAM := parser.py
 VENV         := .venv
 STAMP        := $(VENV)/.install-stamp
 
