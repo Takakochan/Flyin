@@ -3,6 +3,7 @@ import inquirer  # type: ignore[import-untyped]
 from dataclasses import dataclass
 from typing import NamedTuple
 from graph import Graph
+from zone import Zone
 
 # class HubFormatError(Exception):
 #     def __init__(self, value, message='Hub must be discribed Hub_name int int [attributes]') -> None:
@@ -53,15 +54,15 @@ class Parser:
         if line.startswith('nb_drones:'):
             self._nb_drone(line, line_num)
         elif line.startswith('start_hub:'):
-            self.properhub(line, line_num)
+            self._properhub(line, line_num)
         elif line.startswith('end_hub:'):
-            self.properhub(line, line_num)
+            self._properhub(line, line_num)
         elif line.startswith('hub:'):
-            self.properhub(line, line_num)
+            self._properhub(line, line_num)
         elif line.startswith('connection:'):
             self.connection_format(line, line_num)
 
-    def _nb_drone(self, line, line_num) -> int:
+    def _nb_drone(self, line: str, line_num: int) -> int:
         try:
             words = line.split()
             if len(words) != 2:
@@ -74,8 +75,50 @@ class Parser:
         except (ValueError, TypeError):
             raise ValueError(f"Line {line_num}: The format is not as expected")
 
+    def _properhub(self, line: str, line_num: int) -> Zone:
+        zone_dict: Zone = {}
+        try:
+            # if int(line.find("]")) != len(line):
+            if not line.endswith("]"):
+                raise ValueError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
+            if "[" in line and "]" in line:
+                strt = line.find('[')
+                attrbt = line[strt:]
+                dict_attribt = self._get_attribute(attrbt)
+            new_line = line[:strt]
+            print(new_line)
+            words = new_line.split()
+            if len(words) != 4:
+                raise ValueError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
+        except:
+            something()
+        
+        return zone_dict
+
+    def _get_attribute(attrbt: str) -> dict:
+        try: 
+
 
 
 if __name__ == "__main__":
     parser = Parser.select_file()
     parser.parse()
+
+
+
+"""
+• Zone definition on each line using type prefixes:
+◦ start_hub:
+◦ end_hub:
+◦ hub:
+<name> <x> <y> [metadata] marks the starting zone.
+<name> <x> <y> [metadata] marks the end zone.
+<name> <x> <y> [metadata] defines a regular zone.
+◦ The connection syntax forbids dashes in zone names (see below).
+• All metadata is optional and enclosed in brackets [...] with default values:
+◦ zone=<type> (default: normal)
+◦ color=<value> (default: none)
+◦ max_drones=<number> (default: 1) - Maximum drones that can occupy this
+zone simultaneously
+◦ Tags inside brackets can appear in any order.
+"""
