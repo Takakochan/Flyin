@@ -50,17 +50,29 @@ class Parser:
         return graph
     
     def _parse_line(self, line: str, line_num: int, graph: Graph) -> None:
-        if line.startwith('nb_drones:'):
-            self.nb_drone(line, line_num)
-        elif line.startwith('start_hub:'):
+        if line.startswith('nb_drones:'):
+            self._nb_drone(line, line_num)
+        elif line.startswith('start_hub:'):
             self.properhub(line, line_num)
-        elif line.startwith('end_hub:'):
+        elif line.startswith('end_hub:'):
             self.properhub(line, line_num)
-        elif line.startwith('hub:'):
+        elif line.startswith('hub:'):
             self.properhub(line, line_num)
         elif line.startswith('connection:'):
             self.connection_format(line, line_num)
 
+    def _nb_drone(self, line, line_num) -> int:
+        try:
+            words = line.split()
+            if len(words) != 2:
+                raise ValueError(f"Lini {line_num}: expected form"
+                                 f" 'nb_drones: <positive num>'")
+            nb_drone = words[1]
+            if nb_drone <= 0:
+                raise ValueError("Number of drones must be positive")
+            return nb_drone
+        except (ValueError, TypeError):
+            raise ValueError(f"Line {line_num}: The format is not as expected")
 
 
 
