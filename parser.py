@@ -97,6 +97,7 @@ class Parser:
 
     def _get_attribute(attrbt: str) -> dict:
         try: 
+            
 
 
 
