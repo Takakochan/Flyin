@@ -7,6 +7,7 @@ class Connection(BaseModel):
     to: Zone
     max_link_capacity: int = Field(default=1, ge=1)
 
+
 # nb_drones: 5
 
 
