@@ -1,109 +1,124 @@
 import glob
 import inquirer  # type: ignore[import-untyped]
-from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Any
+from collections.abc import Callable
+from functools import wraps
+
 from graph import Graph
 from zone import Zone
-
-# class HubFormatError(Exception):
-#     def __init__(self, value, message='Hub must be discribed Hub_name int int [attributes]') -> None:
+from location import Position
 
 
-class Position(NamedTuple):
-    x: int
-    y: int
+type ExportFn = Callable[[str, int], Any]
+
+exporters = dict[str, ExportFn] = {}
+class ParserError(Exception):
+    pass
+
+def register_exporter(key_word: str) -> Callable:
+    def decorator(func: ExportFn) -> ExportFn:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+        exporters[key_word] = wrapper
+        return wrapper
+    return decorator
 
 
-@dataclass
-class Parser:
-    filepath: str
 
-    @classmethod
-    def select_file(cls) -> "Parser":
-        dir_path = glob.glob("maps/**/*.txt")
-        question = [
-            inquirer.List(
-                "file",
-                message="which file would like to try?",
-                choices=dir_path,
-            )
-        ]
-        answers = inquirer.prompt(question)
-        if not answers:
-            raise ValueError("No file selected")
-        selected = answers["file"]
-        print(f"The file  {selected} is selected")
-        return cls(filepath=selected)
+def select_file(cls) -> str:
+    dir_path = glob.glob("maps/**/*.txt")
+    question = [
+        inquirer.List(
+            "file",
+            message="which file would like to try?",
+            choices=dir_path,
+        )
+    ]
+    answers = inquirer.prompt(question)
+    if not answers:
+        raise ValueError("No file selected")
+    selected = answers["file"]
+    print(f"The file  {selected} is selected")
+    return selected
 
-    def parser(self) -> Graph:
-        graph = Graph()
-        try:
-            with open(self.filepath, "r", encoding="utf-8") as f:
-                for line_num, line in enumerate(f, start=1):
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    self._parse_line(line, line_num, graph)
-        except FileNotFoundError:
-            raise ValueError(f"file not found: {self.filepath}")
-        except PermissionError:
-            raise PermissionError(f"Permission denied: {self.filepath}")
-        return graph
+
+def parser(file_path: str) -> Graph:
+    graph = Graph()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, start=1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                export_data(line, line_num, graph)
+    except FileNotFoundError:
+        raise ValueError(f"file not found: {file_path}")
+    except PermissionError:
+        raise PermissionError(f"Permission denied: {file_path}")
+    return graph
+
+def export_data(line: str, line_num: int, graph) -> Graph:
+    title, sep, info = line.partition(':')
+    exporter = exporters.get(title)
+    if exporter is None:
+        raise ParserError(f"Line: {line_num} no exporter found in the format")
+    exporter(line, line_num)
+
+@register_exporter("nb_drones:")
+def _nb_drone(self, line: str, line_num: int) -> int:
+    words = line.split()
+    if len(words) != 2:
+        raise ParserError(f"Line {line_num}: expected form"
+                         f" 'nb_drones: <positive num>'")
+    try:
+        nb_drone = int(words[1])
+    except (ValueError, TypeError):
+        raise ParserError(f"Line {line_num}: THe format is not as expected")
+    if nb_drone <= 0:
+        raise ParserError("Number of drones must be positive")
+    return nb_drone
+
+@register_exporter("start_hub")
+@register_exporter("hub")
+@register_exporter("end_hub")
+def _properhub(self, line: str, line_num: int) -> Zone:
+    zone_dict: Zone = {}
+    try:
+        # if int(line.find("]")) != len(line):
+        if not line.endswith("]"):
+            raise ParserError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
+        if "[" in line and "]" in line:
+            strt = line.find('[')
+            attrbt = line[strt:]
+            # dict_attribt = self._get_attribute(attrbt)
+        new_line = line[:strt]
+        print(new_line)
+        words = new_line.split()
+        if len(words) != 4:
+            raise ParserError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
+    except ValueError:
+        raise ('Some error')
     
-    def _parse_line(self, line: str, line_num: int, graph: Graph) -> None:
-        if line.startswith('nb_drones:'):
-            self._nb_drone(line, line_num)
-        elif line.startswith('start_hub:'):
-            self._properhub(line, line_num)
-        elif line.startswith('end_hub:'):
-            self._properhub(line, line_num)
-        elif line.startswith('hub:'):
-            self._properhub(line, line_num)
-        elif line.startswith('connection:'):
-            self.connection_format(line, line_num)
+    return zone_dict
 
-    def _nb_drone(self, line: str, line_num: int) -> int:
-        try:
-            words = line.split()
-            if len(words) != 2:
-                raise ValueError(f"Lini {line_num}: expected form"
-                                 f" 'nb_drones: <positive num>'")
-            nb_drone = words[1]
-            if nb_drone <= 0:
-                raise ValueError("Number of drones must be positive")
-            return nb_drone
-        except (ValueError, TypeError):
-            raise ValueError(f"Line {line_num}: The format is not as expected")
-
-    def _properhub(self, line: str, line_num: int) -> Zone:
-        zone_dict: Zone = {}
-        try:
-            # if int(line.find("]")) != len(line):
-            if not line.endswith("]"):
-                raise ValueError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
-            if "[" in line and "]" in line:
-                strt = line.find('[')
-                attrbt = line[strt:]
-                dict_attribt = self._get_attribute(attrbt)
-            new_line = line[:strt]
-            print(new_line)
-            words = new_line.split()
-            if len(words) != 4:
-                raise ValueError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
-        except:
-            something()
-        
-        return zone_dict
-
-    def _get_attribute(attrbt: str) -> dict:
-        try: 
-            
+@register_exporter("connection")
+def _get_connection_info(line: str, line_num: int) -> None:
+    words = line.split()
+    if len(words) < 2:
+        raise ParserError('wrong format')
 
 
+# def _get_attribute(line: str) -> None:
+#     if '[' not in line:
+#         raise
 
 if __name__ == "__main__":
-    parser = Parser.select_file()
-    parser.parse()
+    try:
+        file_path = select_file()
+        parser(file_path)
+    except ParserError as e:
+        print(f"Error: {e}")
 
 
 

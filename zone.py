@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum, Enum, auto
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
-from parser import Position
+from location import Position
 
 
 class ZoneRole(StrEnum):
@@ -21,6 +21,7 @@ class ZoneType(StrEnum):
 # <TODO> need to check if it's functions
 class PositionValueError(Exception):
     """Position values don't have right format"""
+
     def __init__(self, value: int, message: str) -> None:
         self.value = value
         self.message = message
@@ -29,21 +30,21 @@ class PositionValueError(Exception):
 
 class Zone(BaseModel):
     """
-    wondering if I can varidate most of the comming data with pydantic here. 
+    wondering if I can varidate most of the comming data with pydantic here.
     """
+
     name: str
     position: Position
     max_drones: int = Field(default=1, ge=1)
-    zone_type: ZoneType.NORMAL
+    zone_type: ZoneType = ZoneType.NORMAL
     color: str | None = None
 
 
-@field_validator('position')
+@field_validator("position")
 @classmethod
 def position_int(cls, value) -> Optional[int]:
     if value == int:
-        raise PositionValueError(value,
-                                 message="Position values shoud be integers")
+        raise PositionValueError(value, message="Position values shoud be integers")
     return value
 
 
