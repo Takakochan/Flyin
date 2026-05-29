@@ -4,9 +4,11 @@ from collections.abc import Callable
 from typing import Any
 from functools import wraps
 from dataclasses import dataclass
+from pprint import pprint
 
 from graph import Graph
 from zone import Zone, ZoneType, ZoneRole, ZoneState, Position
+from connection import Connection
 
 
 type ExportFn = Callable[[str, int], Any]
@@ -55,7 +57,9 @@ def select_file() -> str:
 
 
 def parser(file_path: str) -> Graph:
-    graph = Graph(zones={}, connections=[])
+    graph_dict = {}
+    zone_dict = []
+    connection_dict = []
     try:
         with open(file_path, "r") as f:
             for line_num, line in enumerate(f, 1):
@@ -63,17 +67,32 @@ def parser(file_path: str) -> Graph:
                 line = line.strip()
                 if not line or line.startswith('#') or line.startswith('\n'):
                     continue
-                export_data(line, line_num)
+                update = export_data(line, line_num)
+                if update.target == "Zone":
+                    zone_dict.append(update.data)
+                elif update.target == "Graph":
+                    graph_dict.update(update.data)
+                elif update.target == "Connection":
+                    connection_dict.append(update.data)
+
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
-    return graph
+    print("=== ZONE DATA ===")
+    pprint(zone_dict)
+    print("=== CONNETION DATA ===")
+    pprint(connection_dict)
+    print("=== GRAPH DATA ===")
+    pprint(graph_dict)
+
+    return Graph(
+        zones=zone_dict,
+
+    )
 
 
-def export_data(line: str, line_num: int) -> None:
-    print(line)
-
+def export_data(line: str, line_num: int) -> ParseUpdate:
     for sep in SEPARATORS:
         # print(f"DEBUG tyring a separator '{sep}'")
         if sep in line:
@@ -81,10 +100,9 @@ def export_data(line: str, line_num: int) -> None:
             exporter = EXPORTERS.get(title)
             if exporter is None:
                 raise ParserError(f"Line: {line_num} No exporter found for the format")
-            exporter(line, line_num)
-            return
+            update = exporter(line, line_num)
+            return update
     raise ParserError("No valid form")
-
 
 
 @register_exporter("nb_drones")
@@ -95,9 +113,8 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
     nb_drones = int(words[1])
     if nb_drones <= 0:
         raise ParserError(f"Line {line_num}: Number of drones must be positive")
-    print(f"Number of drones are: {nb_drones}")
     return ParseUpdate(
-        target="graph",
+        target="Graph",
         data={"nb_drones": nb_drones}
     )
 
@@ -117,19 +134,21 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     name = hubs[1].strip()
     x = int(hubs[2])
     y = int(hubs[3])
-    print(f"THE ROLE IS {role}")
-    _get_attribute(attrb, line_num)
+    attribute_dict = _get_attribute(attrb, line_num)
     return ParseUpdate(
         target="Zone",
-        data={"zone_role": role, "name": name, "position": Position(x=x, y=y)}
+        data=({"zone_role": role, "name": name, "position": Position(x=x, y=y)} | attribute_dict)
     )
 
 
-def _get_attribute(atrbt: str, line_num: int) -> None:
+def _get_attribute(atrbt: str, line_num: int) -> dict:
+    attribute_dict = {}
     atrbt = atrbt.strip(']')
     atrbts = atrbt.split()
     for word in atrbts:
-        export_data(word, line_num)
+        update = export_data(word, line_num)
+        attribute_dict.update(update.data)
+    return attribute_dict
 
 
 @register_exporter("color")
@@ -139,7 +158,6 @@ def _get_color(line: str, line_num: int) -> ParseUpdate:
         target="Zone",
         data={title: info}
     )
-
 
 
 @register_exporter("zone")
@@ -170,10 +188,37 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
 
 
 @register_exporter("connection")
-def _get_connection_info(line: str, line_num: int) -> None:
-    words = line.split()
-    if len(words) < 2:
-        raise ParserError('wrong format')
+def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
+    try:
+        title, _, info = line.partition(': ')
+    except ParserError:
+        raise ParserError(f"Line {line}: wrong format, expected 'connection: <name of hub>-<name of hub> [max_link_capacity=positive]'")
+    if '[' not in info: #if no attributes
+        infos = info.split("-")
+        if len(infos) != 2:
+            raise ParserError(f"Line {line_num}: wrong format, expected 'connection: <name of hub>-<name of hub> [max_link_capacity=positive]'")
+        return ParseUpdate(
+            target="Connection",
+            data={"origin": infos[0], "to": infos[1]}
+        )
+    info, _, attrbt = info.partition(' [') #with attributes
+    infos = info.split("-")
+    if len(infos) != 2:
+        raise ParserError(f"Line {line_num}: wrong format, expected 'connection: <name of hub>-<name of hub> [max_link_capacity=positive]'")
+    attribute = _get_connection_attribute(attrbt, line_num)
+    return ParseUpdate(
+        target="Connection",
+        data=({"origin": infos[0], "to": infos[1]} | attribute)
+    )
+
+
+@register_exporter('max_link_capacity')
+def _get_connection_attribute(line: str, line_num: int) -> dict:
+    zones = line.strip(']')
+    title, _, max_num = zones.partition("=")
+    return {title: max_num}
+
+
 
 if __name__ == "__main__":
     try:
