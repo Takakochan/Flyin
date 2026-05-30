@@ -57,7 +57,7 @@ def select_file() -> str:
 
 
 def parser(file_path: str) -> Graph:
-    graph_dict = {}
+    nb_drone_dic = {}
     zone_dict = []
     connection_dict = []
     try:
@@ -70,8 +70,8 @@ def parser(file_path: str) -> Graph:
                 update = export_data(line, line_num)
                 if update.target == "Zone":
                     zone_dict.append(update.data)
-                elif update.target == "Graph":
-                    graph_dict.update(update.data)
+                elif update.target == "nbdrone":
+                    nb_drone_dic.update(update.data)
                 elif update.target == "Connection":
                     connection_dict.append(update.data)
 
@@ -84,11 +84,12 @@ def parser(file_path: str) -> Graph:
     print("=== CONNETION DATA ===")
     pprint(connection_dict)
     print("=== GRAPH DATA ===")
-    pprint(graph_dict)
+    pprint(nb_drone_dic)
 
     return Graph(
-        zones=zone_dict,
-
+        zones={data['name']: Zone(**data) for data in zone_dict},
+        connections=[Connection(**cnc) for cnc in connection_dict],
+        nb_drone=nb_drone_dic["nb_drones"]
     )
 
 
@@ -114,7 +115,7 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
     if nb_drones <= 0:
         raise ParserError(f"Line {line_num}: Number of drones must be positive")
     return ParseUpdate(
-        target="Graph",
+        target="nbdrone",
         data={"nb_drones": nb_drones}
     )
 
