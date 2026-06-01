@@ -5,6 +5,7 @@ from typing import Any
 from functools import wraps
 from dataclasses import dataclass
 from pprint import pprint
+from enum import StrEnum, auto
 
 
 from graph import Graph
@@ -18,6 +19,15 @@ EXPORTERS: dict[str, ExportFn] = {}
 SEPARATORS = (":", "[", "=")
 
 
+class ConfigKeyWords(StrEnum):
+    ZONE = auto()
+    CONNECTION = auto()
+    NAME = auto()
+    ORIGIN = auto()
+    TO = auto()
+    NB_DRONE = auto()
+
+
 @dataclass
 class ParseUpdate:
     target: str
@@ -26,6 +36,7 @@ class ParseUpdate:
 
 class ParserError(Exception):
     """base"""
+
     pass
 
 
@@ -35,10 +46,7 @@ class FormatError(ParserError):
     detail: str
 
     def __str__(self) -> str:
-        return (
-            f"Line {self.line_num}: "
-            f"{self.detail}"
-        )
+        return f"Line {self.line_num}: {self.detail}"
 
 
 @dataclass
@@ -65,6 +73,7 @@ class ConnectionFormatError(ParserError):
             "Expected 'connection: <name of hub>-<name of hub> "
             "[Optionl-<max_link_capacity=positive int>]'"
         )
+
 
 @dataclass
 class UnknownKeyError(ParserError):
@@ -148,35 +157,37 @@ def parser(file_path: str) -> Graph:
                 if not line or line.startswith("#") or line.startswith("\n"):
                     continue
 
-                update = export_data(line, line_num)
-                if update.target == "Zone":
-                    zone_dict.append(update.data)
-                    the_name = update.data["name"]
+                fetched = export_data(line, line_num)
+                if fetched.target == ConfigKeyWords.ZONE:
+                    zone_dict.append(fetched.data)
+                    the_name = fetched.data[ConfigKeyWords.NAME]
                     if the_name in zone_names:
                         raise ZoneNameError(
-                            line_num=line_num,
-                            fig=the_name,
-                            detail="is dipplicated"
+                            line_num=line_num, fig=the_name, detail="is dipplicated"
                         )
-                    zone_names.append(update.data["name"])
-                elif update.target == "nbdrone":
-                    nb_drone_dic.update(update.data)
-                elif update.target == "Connection":
-                    for zone in [update.data["origin"], update.data["to"]]:
+                    zone_names.append(fetched.data[ConfigKeyWords.NAME])
+                elif fetched.target == ConfigKeyWords.NB_DRONE:
+                    nb_drone_dic.update(fetched.data)
+                elif fetched.target == ConfigKeyWords.CONNECTION:
+                    for zone in [
+                        fetched.data[ConfigKeyWords.ORIGIN],
+                        fetched.data[ConfigKeyWords.TO],
+                    ]:
                         if zone not in zone_names:
                             raise ZoneNameError(
-                                line_num=line_num,
-                                fig=zone,
-                                detail="is mistyped"
+                                line_num=line_num, fig=zone, detail="is mistyped"
                             )
                     connection_comb = sorted(
-                        [update.data["origin"], update.data["to"]]
+                        [
+                            fetched.data[ConfigKeyWords.ORIGIN],
+                            fetched.data[ConfigKeyWords.TO],
+                        ]
                     )
                     if connection_comb in zone_connection_checker:
                         raise DupplicatedConnectionError(
                             line_num=line_num,
                             fig=connection_comb,
-                            detail="combination already exist"
+                            detail="combination already exist",
                         )
                     zone_connection_checker.append(connection_comb)
 
@@ -184,7 +195,7 @@ def parser(file_path: str) -> Graph:
 
 
                     """
-                    connection_dict.append(update.data)
+                    connection_dict.append(fetched.data)
 
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
@@ -200,7 +211,7 @@ def parser(file_path: str) -> Graph:
     pprint(nb_drone_dic)
 
     return Graph(
-        zones={data["name"]: Zone(**data) for data in zone_dict},
+        zones={data[ConfigKeyWords.NAME]: Zone(**data) for data in zone_dict},
         connections=[Connection(**cnc) for cnc in connection_dict],
         nb_drone=nb_drone_dic["nb_drones"],
     )
@@ -213,16 +224,10 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
             title, _, info = line.partition(sep)
             exporter = EXPORTERS.get(title)
             if exporter is None:
-                raise HubFormatError(
-                    line_num=line_num,
-                    detail="unexpected format"
-                )
-            update = exporter(line, line_num)
-            return update
-    raise HubFormatError(
-        line_num=line_num,
-        detail="unexpected format"
-    )
+                raise HubFormatError(line_num=line_num, detail="unexpected format")
+            fetched_data = exporter(line, line_num)
+            return fetched_data
+    raise HubFormatError(line_num=line_num, detail="unexpected format")
 
 
 @register_exporter("nb_drones")
@@ -231,16 +236,14 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
     if len(words) != 2:
         raise FormatError(
             line_num=line_num,
-            detail="the for mat is expected:: 'nb_drones: <positive number>'"
+            detail="the for mat is expected:: 'nb_drones: <positive number>'",
         )
     nb_drones = int(words[1])
     if nb_drones <= 0:
         raise ValueRangeError(
-            line_num=line_num,
-            field="nb_drones",
-            detail="must be positive"
+            line_num=line_num, field="nb_drones", detail="must be positive"
         )
-    return ParseUpdate(target="nbdrone", data={"nb_drones": nb_drones})
+    return ParseUpdate(target=ConfigKeyWords.NB_DRONE, data={"nb_drones": nb_drones})
 
 
 @register_exporter("start_hub")
@@ -248,17 +251,11 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     if "[" not in line and "]" not in line:
-        raise HubFormatError(
-            line_num=line_num,
-            detail="Attribute is not given"
-        )
+        raise HubFormatError(line_num=line_num, detail="Attribute is not given")
     hub, _, attrb = line.partition("[")
     hubs = hub.split()
     if len(hubs) != 4:
-        raise HubFormatError(
-            line_num=line_num,
-            detail="wrong format"
-        )
+        raise HubFormatError(line_num=line_num, detail="wrong format")
     role = hubs[0].strip(":")
     role, _, _ = role.partition("_")
     name = hubs[1].strip()
@@ -266,9 +263,14 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     y = int(hubs[3])
     attribute_dict = _get_attribute(attrb, line_num)
     return ParseUpdate(
-        target="Zone",
+        target=ConfigKeyWords.ZONE,
         data=(
-            {"zone_role": role, "name": name, "position": Position(x=x, y=y)} | attribute_dict
+            {
+                "zone_role": role,
+                ConfigKeyWords.NAME: name,
+                "position": Position(x=x, y=y),
+            }
+            | attribute_dict
         ),
     )
 
@@ -286,16 +288,16 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
 @register_exporter("color")
 def _get_color(line: str, line_num: int) -> ParseUpdate:
     title, _, info = line.partition("=")
-    return ParseUpdate(target="Zone", data={title: info})
+    return ParseUpdate(target=ConfigKeyWords.ZONE, data={title: info})
 
 
-@register_exporter("zone")
+@register_exporter(ConfigKeyWords.ZONE)
 def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
     """
     check one of those attributes ex)zone=restricted color=darkred max_drones=1
     """
     _, _, info = line.partition("=")
-    return ParseUpdate(target="Zone", data={"zone_type": ZoneType(info)})
+    return ParseUpdate(target=ConfigKeyWords.ZONE, data={"zone_type": ZoneType(info)})
 
 
 @register_exporter("max_drones")
@@ -305,36 +307,28 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
         nb_drones = int(nb_drone)
     except (TypeError, ValueError):
         raise ValueRangeError(
-            line_num=line_num,
-            field="max_drones",
-            detail="should be positive integer"
+            line_num=line_num, field="max_drones", detail="should be positive integer"
         )
     if nb_drones < 0:
         raise ValueRangeError(
-            line_num=line_num,
-            field="max_drones",
-            detail="should be positive integer"
+            line_num=line_num, field="max_drones", detail="should be positive integer"
         )
-    return ParseUpdate(target="Zone", data={"max_drones": nb_drones})
+    return ParseUpdate(target=ConfigKeyWords.ZONE, data={"max_drones": nb_drones})
 
 
-@register_exporter("connection")
+@register_exporter(ConfigKeyWords.CONNECTION)
 def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     try:
         title, _, info = line.partition(": ")
     except ParserError:
-        raise ConnectionFormatError(
-            line_num=line_num,
-            detail=""
-        )
+        raise ConnectionFormatError(line_num=line_num, detail="")
     if "[" not in info:  # if no attributes
         infos = info.split("-")
         if len(infos) != 2:
-            raise ConnectionFormatError(
-                line_num=line_num, detail="wrong format"
-            )
+            raise ConnectionFormatError(line_num=line_num, detail="wrong format")
         return ParseUpdate(
-            target="Connection", data={"origin": infos[0], "to": infos[1]}
+            target=ConfigKeyWords.CONNECTION,
+            data={ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]},
         )
     info, _, attrbt = info.partition(" [")  # with attributes
     infos = info.split("-")
@@ -344,7 +338,10 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
         )
     attribute = _get_connection_attribute(attrbt, line_num)
     return ParseUpdate(
-        target="Connection", data=({"origin": infos[0], "to": infos[1]} | attribute)
+        target=ConfigKeyWords.CONNECTION,
+        data=(
+            {ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]} | attribute
+        ),
     )
 
 
@@ -386,7 +383,7 @@ end_hub: goal 3 0 [color=red]
 
     # t = (1, 2, 3)
     # a((1, 2, 3))
-    # d = {"name": "steve", "pos": (1, 3)}
+    # d = {ConfigKeyWords.NAME: "steve", "pos": (1, 3)}
     # a(**d)
     # a(name="steve", pos=(1, 3))
     # a(pos=(1,5))
