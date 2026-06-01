@@ -14,9 +14,8 @@ from connection import Connection
 
 
 type ExportFn = Callable[[str, int], Any]
-
-EXPORTERS: dict[str, ExportFn] = {}
-SEPARATORS = (":", "[", "=")
+type SetterFn = Callable[[ConfigKeyWords, list, int], Any]
+#
 
 
 class ConfigKeyWords(StrEnum):
@@ -27,6 +26,19 @@ class ConfigKeyWords(StrEnum):
     TO = auto()
     NB_DRONE = auto()
 
+
+EXPORTERS: dict[str, ExportFn] = {}
+SETTERS: dict[ConfigKeyWords, SetterFn] = {}
+SEPARATORS = (":", "[", "=")
+
+
+@dataclass
+class ParseState:
+    zones: list[dict]
+    zone_names: set[str]
+    connections: list[dict]
+    connection_seen: set[frozenset[str]]
+    nb_drones: int | None = None
 
 @dataclass
 class ParseUpdate:
@@ -127,6 +139,16 @@ def register_exporter(key_word: str) -> Callable:
     return decorator
 
 
+def setter_machine(name: ConfigKeyWords) -> Callable:
+    def decorator(func: SetterFn) -> ExportFn:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> list:
+            return func(*args, **kwargs)
+        SETTERS[name] = wrapper
+        return wrapper
+    return decorator
+
+
 def select_file() -> str:
     dir_path = glob.glob("maps/**/*.txt")
     question = [
@@ -145,11 +167,13 @@ def select_file() -> str:
 
 
 def parser(file_path: str) -> Graph:
-    nb_drone_dic = {}
-    zone_dict = []
-    zone_names = []
-    connection_dict = []
-    zone_connection_checker = [list[str, str]]
+    state = ParseState(
+        zones=[],
+        zone_names=set(),
+        connections=[],
+        connection_seen=set(),
+        nb_drones=None,
+    )
     try:
         with open(file_path, "r") as f:
             for line_num, line in enumerate(f, 1):
@@ -158,63 +182,57 @@ def parser(file_path: str) -> Graph:
                     continue
 
                 fetched = export_data(line, line_num)
-                if fetched.target == ConfigKeyWords.ZONE:
-                    zone_dict.append(fetched.data)
-                    the_name = fetched.data[ConfigKeyWords.NAME]
-                    if the_name in zone_names:
-                        raise ZoneNameError(
-                            line_num=line_num, fig=the_name, detail="is dipplicated"
-                        )
-                    zone_names.append(fetched.data[ConfigKeyWords.NAME])
-                elif fetched.target == ConfigKeyWords.NB_DRONE:
-                    nb_drone_dic.update(fetched.data)
-                elif fetched.target == ConfigKeyWords.CONNECTION:
-                    for zone in [
-                        fetched.data[ConfigKeyWords.ORIGIN],
-                        fetched.data[ConfigKeyWords.TO],
-                    ]:
-                        if zone not in zone_names:
-                            raise ZoneNameError(
-                                line_num=line_num, fig=zone, detail="is mistyped"
-                            )
-                    connection_comb = sorted(
-                        [
-                            fetched.data[ConfigKeyWords.ORIGIN],
-                            fetched.data[ConfigKeyWords.TO],
-                        ]
-                    )
-                    if connection_comb in zone_connection_checker:
-                        raise DupplicatedConnectionError(
-                            line_num=line_num,
-                            fig=connection_comb,
-                            detail="combination already exist",
-                        )
-                    zone_connection_checker.append(connection_comb)
-
-                    """sketch of connections dupplication and error
-
-
-                    """
-                    connection_dict.append(fetched.data)
+                match fetched.target:
+                    case ConfigKeyWords.ZONE:
+                        handle_zone(state, fetched, line_num)
+                    case ConfigKeyWords.CONNECTION:
+                        handle_connection(state, fetched, line_num)
+                    case ConfigKeyWords.NB_DRONE:
+                        state.nb_drones = fetched.data["nb_drones"]
 
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
     print("=== ZONE DATA ===")
-    pprint(zone_dict)
-    print("+++++NAMES+++++")
-    pprint(zone_names)
+    pprint(state.zones)
+    # print("+++++NAMES+++++")
+    # pprint(zone_dict)
     print("=== CONNETION DATA ===")
-    pprint(connection_dict)
+    pprint(state.connections)
     print("=== GRAPH DATA ===")
-    pprint(nb_drone_dic)
+    print(state.nb_drones)
 
     return Graph(
-        zones={data[ConfigKeyWords.NAME]: Zone(**data) for data in zone_dict},
-        connections=[Connection(**cnc) for cnc in connection_dict],
-        nb_drone=nb_drone_dic["nb_drones"],
+        zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
+        connections=[Connection(**cnc) for cnc in state.connections],
+        nb_drone=state.nb_drones,
     )
+
+
+def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
+    name = fetched.data[ConfigKeyWords.NAME]
+    if name in state.zone_names:
+        raise ZoneNameError(
+            line_num=line_num, fig=name, detail="is dipplicated"
+        )
+    state.zone_names.add(name)
+    state.zones.append(fetched.data)
+
+
+def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
+    pair = frozenset({
+        fetched.data[ConfigKeyWords.ORIGIN],
+        fetched.data[ConfigKeyWords.TO],
+    })
+    if pair in state.connection_seen:
+        raise DupplicatedConnectionError(
+            line_num=line_num,
+            fig=list(pair),
+            detail="already exist"
+        )
+    state.connection_seen.add(pair)
+    state.connections.append(fetched.data)
 
 
 def export_data(line: str, line_num: int) -> ParseUpdate:
@@ -228,6 +246,26 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
             fetched_data = exporter(line, line_num)
             return fetched_data
     raise HubFormatError(line_num=line_num, detail="unexpected format")
+
+
+# def set_data(fetched: ParseUpdate, line_num: int):
+#     setter = SETTERS.get(ConfigKeyWords(ParseUpdate.target))
+#     if setter is None:
+#         raise Exception("UnKnown Error Occored")
+#     set_list = setter(fetched, line_num)
+#     return set_list
+
+
+
+
+
+# @setter_machine(ConfigKeyWords.ZONE)
+# def _set_zone_names(fetched: ParseUpdate, li: list, line_num: int) -> list:
+#     li.append(fetched.data)
+#     the_name = fetched.data[ConfigKeyWords.NAME]
+#     if the_name in li:
+#         raise ZoneNameError(
+#             line_num=line_num, fig=the_name, detail="is dipplicated")
 
 
 @register_exporter("nb_drones")
@@ -344,7 +382,6 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
         ),
     )
 
-
 @register_exporter("max_link_capacity")
 def _get_connection_attribute(line: str, line_num: int) -> dict:
     zones = line.strip("]")
@@ -359,6 +396,9 @@ if __name__ == "__main__":
     except ParserError as e:
         print(e)
         exit(1)
+
+
+
 
 
 """
