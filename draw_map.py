@@ -4,11 +4,6 @@ from graph import Graph
 
 
 class DrawConnection():
-    # x1: int
-    # x2: int
-    # y1: int
-    # y2: int
-    # max_num: int
     @staticmethod
     def draw(graph: Graph) -> None:
         w_px, h_px = 3600, 1600

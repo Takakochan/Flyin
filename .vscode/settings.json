@@ -1,5 +1,5 @@
 {
-    "editor.insertSpaces": false,
+    "editor.insertSpaces": true,
     "editor.detectIndentation": false,
     "editor.tabSize": 4,
     "editor.formatOnSave": true,
@@ -7,7 +7,7 @@
 
     "python.linting.enabled": true,
     "python.linting.flake8Enabled": true,
-    "python.linting.flake8Args": ["--ignore=E101"],
+    "python.linting.flake8Args": [],
 
     "files.encoding": "utf8"
 }

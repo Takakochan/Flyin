@@ -1,27 +1,7 @@
-from pydantic import BaseModel, Field  # pyright: ignore[reportMissingTypeStubs]
+from pydantic import BaseModel, Field
 
 
 class Connection(BaseModel):
     origin: str
     to: str
     max_link_capacity: int = Field(default=1, ge=1)
-
-
-# nb_drones: 5
-
-
-# start_hub: hub 0 0 [color=green]
-# end_hub: goal 10 10 [color=yellow]
-# hub: roof1 3 4 [zone=restricted color=red]
-# hub: roof2 6 2 [zone=normal color=blue]
-# hub: corridorA 4 3 [zone=priority color=green max_drones=2]
-# hub: tunnelB 7 4 [zone=normal color=red]
-# hub: obstacleX 5 5 [zone=blocked color=gray]
-
-
-# connection: hub-roof1
-# connection: hub-corridorA
-# connection: roof1-roof2
-# connection: roof2-goal
-# connection: corridorA-tunnelB [max_link_capacity=2]
-# connection: tunnelB-goal

@@ -4,18 +4,17 @@ from collections.abc import Callable
 from typing import Any
 from functools import wraps
 from dataclasses import dataclass
-from pprint import pprint
 from enum import StrEnum, auto
 
 
 from graph import Graph
 from zone import Zone, ZoneType, Position
 from connection import Connection
+from draw_map import DrawConnection
 
 
 type ExportFn = Callable[[str, int], Any]
 type SetterFn = Callable[[ConfigKeyWords, list, int], Any]
-#
 
 
 class ConfigKeyWords(StrEnum):
@@ -38,7 +37,8 @@ class ParseState:
     zone_names: set[str]
     connections: list[dict]
     connection_seen: set[frozenset[str]]
-    nb_drones: int | None = None
+    nb_drones: int
+
 
 @dataclass
 class ParseUpdate:
@@ -144,8 +144,10 @@ def setter_machine(name: ConfigKeyWords) -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> list:
             return func(*args, **kwargs)
+
         SETTERS[name] = wrapper
         return wrapper
+
     return decorator
 
 
@@ -172,7 +174,7 @@ def parser(file_path: str) -> Graph:
         zone_names=set(),
         connections=[],
         connection_seen=set(),
-        nb_drones=None,
+        nb_drones=0,
     )
     try:
         with open(file_path, "r") as f:
@@ -194,15 +196,6 @@ def parser(file_path: str) -> Graph:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
-    print("=== ZONE DATA ===")
-    pprint(state.zones)
-    # print("+++++NAMES+++++")
-    # pprint(zone_dict)
-    print("=== CONNETION DATA ===")
-    pprint(state.connections)
-    print("=== GRAPH DATA ===")
-    print(state.nb_drones)
-
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
         connections=[Connection(**cnc) for cnc in state.connections],
@@ -214,22 +207,24 @@ def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
         raise ZoneNameError(
-            line_num=line_num, fig=name, detail="is dipplicated"
+            line_num=line_num,
+            fig=name,
+            detail="is dipplicated"
         )
     state.zone_names.add(name)
     state.zones.append(fetched.data)
 
 
 def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
-    pair = frozenset({
-        fetched.data[ConfigKeyWords.ORIGIN],
-        fetched.data[ConfigKeyWords.TO],
-    })
+    pair = frozenset(
+        {
+            fetched.data[ConfigKeyWords.ORIGIN],
+            fetched.data[ConfigKeyWords.TO],
+        }
+    )
     if pair in state.connection_seen:
         raise DupplicatedConnectionError(
-            line_num=line_num,
-            fig=list(pair),
-            detail="already exist"
+            line_num=line_num, fig=list(pair), detail="already exist"
         )
     state.connection_seen.add(pair)
     state.connections.append(fetched.data)
@@ -237,35 +232,17 @@ def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
 
 def export_data(line: str, line_num: int) -> ParseUpdate:
     for sep in SEPARATORS:
-        # print(f"DEBUG tyring a separator '{sep}'")
         if sep in line:
             title, _, info = line.partition(sep)
             exporter = EXPORTERS.get(title)
             if exporter is None:
-                raise HubFormatError(line_num=line_num, detail="unexpected format")
+                raise HubFormatError(
+                    line_num=line_num,
+                    detail="unexpected format"
+                )
             fetched_data = exporter(line, line_num)
             return fetched_data
     raise HubFormatError(line_num=line_num, detail="unexpected format")
-
-
-# def set_data(fetched: ParseUpdate, line_num: int):
-#     setter = SETTERS.get(ConfigKeyWords(ParseUpdate.target))
-#     if setter is None:
-#         raise Exception("UnKnown Error Occored")
-#     set_list = setter(fetched, line_num)
-#     return set_list
-
-
-
-
-
-# @setter_machine(ConfigKeyWords.ZONE)
-# def _set_zone_names(fetched: ParseUpdate, li: list, line_num: int) -> list:
-#     li.append(fetched.data)
-#     the_name = fetched.data[ConfigKeyWords.NAME]
-#     if the_name in li:
-#         raise ZoneNameError(
-#             line_num=line_num, fig=the_name, detail="is dipplicated")
 
 
 @register_exporter("nb_drones")
@@ -281,7 +258,10 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
         raise ValueRangeError(
             line_num=line_num, field="nb_drones", detail="must be positive"
         )
-    return ParseUpdate(target=ConfigKeyWords.NB_DRONE, data={"nb_drones": nb_drones})
+    return ParseUpdate(
+        target=ConfigKeyWords.NB_DRONE,
+        data={"nb_drones": nb_drones}
+    )
 
 
 @register_exporter("start_hub")
@@ -289,7 +269,10 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     if "[" not in line and "]" not in line:
-        raise HubFormatError(line_num=line_num, detail="Attribute is not given")
+        raise HubFormatError(
+            line_num=line_num,
+            detail="Attribute is not given"
+        )
     hub, _, attrb = line.partition("[")
     hubs = hub.split()
     if len(hubs) != 4:
@@ -307,8 +290,7 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
                 "zone_role": role,
                 ConfigKeyWords.NAME: name,
                 "position": Position(x=x, y=y),
-            }
-            | attribute_dict
+            } | attribute_dict
         ),
     )
 
@@ -335,7 +317,10 @@ def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
     check one of those attributes ex)zone=restricted color=darkred max_drones=1
     """
     _, _, info = line.partition("=")
-    return ParseUpdate(target=ConfigKeyWords.ZONE, data={"zone_type": ZoneType(info)})
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"zone_type": ZoneType(info)}
+    )
 
 
 @register_exporter("max_drones")
@@ -345,13 +330,20 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
         nb_drones = int(nb_drone)
     except (TypeError, ValueError):
         raise ValueRangeError(
-            line_num=line_num, field="max_drones", detail="should be positive integer"
+            line_num=line_num,
+            field="max_drones",
+            detail="should be positive integer"
         )
     if nb_drones < 0:
         raise ValueRangeError(
-            line_num=line_num, field="max_drones", detail="should be positive integer"
+            line_num=line_num,
+            field="max_drones",
+            detail="should be positive integer"
         )
-    return ParseUpdate(target=ConfigKeyWords.ZONE, data={"max_drones": nb_drones})
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"max_drones": nb_drones}
+    )
 
 
 @register_exporter(ConfigKeyWords.CONNECTION)
@@ -363,10 +355,14 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     if "[" not in info:  # if no attributes
         infos = info.split("-")
         if len(infos) != 2:
-            raise ConnectionFormatError(line_num=line_num, detail="wrong format")
+            raise ConnectionFormatError(
+                line_num=line_num,
+                detail="wrong format"
+            )
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
-            data={ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]},
+            data={ConfigKeyWords.ORIGIN: infos[0],
+                  ConfigKeyWords.TO: infos[1]},
         )
     info, _, attrbt = info.partition(" [")  # with attributes
     infos = info.split("-")
@@ -378,9 +374,13 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     return ParseUpdate(
         target=ConfigKeyWords.CONNECTION,
         data=(
-            {ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]} | attribute
+            {
+                ConfigKeyWords.ORIGIN: infos[0],
+                ConfigKeyWords.TO: infos[1]
+            } | attribute
         ),
     )
+
 
 @register_exporter("max_link_capacity")
 def _get_connection_attribute(line: str, line_num: int) -> dict:
@@ -392,85 +392,12 @@ def _get_connection_attribute(line: str, line_num: int) -> dict:
 if __name__ == "__main__":
     try:
         file = select_file()
-        parser(file)
+        graph = parser(file)
+        print(graph.zones)
+        print(len(graph.zones))
+        print(len(graph.connections))
+        DrawConnection.draw(graph)
+
     except ParserError as e:
         print(e)
         exit(1)
-
-
-
-
-
-"""
-class Graph(BaseModel):
-    zones: dict[str, Zone]
-    connections: list[Connection]
-    start: Zone | None = None
-    goal: Zone | None = None
-    nb_drone: int = 0
-class Zone(BaseModel):
-    name: str
-    position: Position
-    max_drones: int = Field(default=1, ge=1)
-    zone_type: ZoneType.NORMAL
-    color: str | None = None
-
-hub: waypoint1 1 0 [color=blue]
-hub: waypoint2 2 0 [color=blue]
-end_hub: goal 3 0 [color=red]
-
-    # def a(name, pos)
-
-    # t = (1, 2, 3)
-    # a((1, 2, 3))
-    # d = {ConfigKeyWords.NAME: "steve", "pos": (1, 3)}
-    # a(**d)
-    # a(name="steve", pos=(1, 3))
-    # a(pos=(1,5))
-
-Pydantic の BaseModel の仕組みから説明します。
-
-  ---
-  普通の Python クラスとの違い
-
-  普通のクラスなら __init__ を自分で書きますが、BaseModel を継承すると
-   Pydantic が自動でやってくれます。
-
-  # Zone の定義
-  class Zone(BaseModel):
-      name: str
-      position: Position
-      color: str | None = None
-
-  これを見た Pydantic は自動的に：
-  - name と position は必須
-  - color はオプション（デフォルト None）
-
-  という __init__ を生成します。
-
-  ---
-  作り方
-
-  # ✅ Pydantic の作り方
-  zone = Zone(name="waypoint1", position=Position(x=1, y=0))
-
-  # ❌ dict は Zone ではない（型が違う）
-  zone_dict: Zone = {}
-  zone_dict['name'] = "waypoint1"  # Zone オブジェクトに []
-  でアクセスはできない
-
-  ---
-  Pydantic の嬉しいところ
-
-  作るときにバリデーションも自動で走ります：
-
-  Zone(name="waypoint1", position=Position(x="abc", y=0))
-  # → エラー！x は int でなければならない
-
-  zone.py の max_drones: int = Field(default=1, ge=1) の ge=1 は「1以
-  上でなければならない」という制約で、これも自動でチェックされます。
-
-  ---
-  まとめると、Zone(...) はクラスのインスタンスを作る呼び出しで、dict
-  の {} とは全く別物です。
-"""
