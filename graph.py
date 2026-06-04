@@ -9,3 +9,4 @@ class Graph(BaseModel):
     # start: Zone | None = None
     # goal: Zone | None = None
     nb_drone: int = 0
+    adjacency: dict[str, list[str]]
