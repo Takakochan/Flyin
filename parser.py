@@ -334,7 +334,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
             field="max_drones",
             detail="should be positive integer"
         )
-    if nb_drones < 0:
+    if nb_drones <= 0:
         raise ValueRangeError(
             line_num=line_num,
             field="max_drones",
@@ -347,7 +347,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
 
 
 @register_exporter(ConfigKeyWords.CONNECTION)
-def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
+def _get_connection_attribute(line: str, line_num: int) -> ParseUpdate:
     try:
         title, _, info = line.partition(": ")
     except ParserError:
@@ -382,7 +382,7 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     )
 
 
-@register_exporter("max_link_capacity")
+#@register_exporter("max_link_capacity")
 def _get_connection_attribute(line: str, line_num: int) -> dict:
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
