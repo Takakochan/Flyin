@@ -196,10 +196,19 @@ def parser(file_path: str) -> Graph:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
+
+    zones = {dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones}
+    connections = [Connection(**cnc) for cnc in state.connections]
+    nb_drone = state.nb_drones
+    adjacency: dict[str, list[str]] = {}
+    for conn in connections:
+        adjacency.setdefault(conn.origin, []).append(conn.to)
+    # adjacency = {conn.origin: [zones[conn.to].name] for conn in connections}
     return Graph(
-        zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
-        connections=[Connection(**cnc) for cnc in state.connections],
-        nb_drone=state.nb_drones,
+        zones=zones,
+        connections=connections,
+        nb_drone=nb_drone,
+        adjacency=adjacency
     )
 
 
@@ -393,9 +402,7 @@ if __name__ == "__main__":
     try:
         file = select_file()
         graph = parser(file)
-        print(graph.zones)
-        print(len(graph.zones))
-        print(len(graph.connections))
+        print(graph)
         DrawConnection.draw(graph)
 
     except ParserError as e:

@@ -10,8 +10,6 @@ class DrawConnection():
         dpi = 80
         fig, ax = plt.subplots(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
         for i, connection in enumerate(graph.connections):
-            print(i)
-            print(graph.zones[connection.to])
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
             plt.plot([origin.position.x, to.position.x], [origin.position.y, to.position.y], color='gray')
