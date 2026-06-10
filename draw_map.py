@@ -6,7 +6,7 @@ from graph import Graph
 class DrawConnection():
     @staticmethod
     def draw(graph: Graph) -> None:
-        w_px, h_px = 3600, 1600
+        w_px, h_px = 1800, 800
         dpi = 80
         fig, ax = plt.subplots(figsize=(w_px / dpi, h_px / dpi), dpi=dpi)
         for i, connection in enumerate(graph.connections):
