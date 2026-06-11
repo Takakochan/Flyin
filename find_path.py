@@ -34,9 +34,9 @@ class CBSSolver():
         start_zone = next(z for z in self.graph.zones.values() if z.zone_role == "start")
         goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == 'end')
         constraints: set[Constraint] = set()
-        print('solve is called')
         for drone_id in range(self.graph.nb_drone):
-            path = a_star(self.graph, start_zone, goal_zone, constraints)
+            print(f"DEBUG:: dorone_id::{drone_id}")
+            path = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
             paths[drone_id] = path
 
         while True:
@@ -47,14 +47,9 @@ class CBSSolver():
                 return paths
             constraint = self.constraint_generator(conflict)
             for c in constraint:
-                print(50)
                 constraints.add(c)
             for drone_id in range(self.graph.nb_drone):
-                print(53)
-                paths[drone_id] = a_star(self.graph, start_zone, goal_zone, constraints)
-
-
-
+                paths[drone_id] = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
 
 
     def conflict_detector(self, paths) -> Conflict:
@@ -62,7 +57,7 @@ class CBSSolver():
             path_a = paths[drone_id]
             path_b = paths[drone_id + 1]
             for time_step, (zone_a, zone_b) in enumerate(zip(path_a, path_b)):
-                if zone_a == zone_b:
+                if zone_a == zone_b and time_step != 0: #zone.max_drones
                     conflict = Conflict(drone_id, drone_id + 1, zone_a, time_step)
                     return conflict
         return None
@@ -79,6 +74,7 @@ def a_star(
     start: Zone,
     goal: Zone,
     constraints: set[Constraint],
+    drone_id: int
 ) -> list[str]:
 
     time_step: int = 0
@@ -86,7 +82,7 @@ def a_star(
     came_from: dict[tuple[str, int], tuple[str, int]] = {} #dict[tuple current, tuple previous]
     neighbours = []
     visited_set: set[tuple[str, int]] = set()
-    constraint_set = {(c.zone_name, c.time_step) for c in constraints} #制約のあるzoneとタイムステップの記録
+    constraint_set = {(c.zone_name, c.time_step) for c in constraints if c.dron_id == drone_id} #制約のあるzoneとタイムステップの記録
     open_queue = PriorityQueue()
     open_queue.push(h_score(start.position, goal.position), start, time_step)
 
@@ -94,8 +90,12 @@ def a_star(
         current, time_step = open_queue.pop()
         if current == goal:
             break
+        # print(f"Zone name {current.name}")
         current_set = (current.name, time_step)
-        neighbours = graph.adjacency[current.name] #Neighbours which are connected from current zone
+        neighbours = graph.adjacency.get(current.name, []) #Neighbours which are connected from current zone
+        # if neighbours is None:
+        #     print(f"Neigbours: {neighbours}")
+        #     continue
         for next_zone_name in neighbours:
             next_time_step = time_step + 1
             new_state = (next_zone_name, next_time_step)
@@ -142,6 +142,7 @@ class PriorityQueue:
 if __name__ == '__main__':
     file = select_file()
     graph = parser(file)
+    print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     solver.solve()
     #start_zone = next(z for z in graph.zones.values() if z.zone_role == "start")

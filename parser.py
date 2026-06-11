@@ -176,6 +176,7 @@ def parser(file_path: str) -> Graph:
         connection_seen=set(),
         nb_drones=0,
     )
+    to_list = []
     try:
         with open(file_path, "r") as f:
             for line_num, line in enumerate(f, 1):
@@ -209,7 +210,7 @@ def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
         raise ZoneNameError(
             line_num=line_num,
             fig=name,
-            detail="is dipplicated"
+            detail="is dupplicated"
         )
     state.zone_names.add(name)
     state.zones.append(fetched.data)
