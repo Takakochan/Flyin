@@ -1,4 +1,3 @@
-from typing import Protocol
 import heapq
 from itertools import count
 from dataclasses import dataclass
@@ -6,9 +5,6 @@ import math
 
 from graph import Graph
 from zone import Zone, Position
-from connection import Connection
-from draw_map import DrawConnection
-
 
 
 @dataclass
@@ -24,7 +20,6 @@ class Conflict():
     dron_id_b: int
     zone_name: str
     time_step: int
-
 
 
 class CBSSolver():
@@ -80,7 +75,7 @@ def a_star(
         path.append(start.name)
         path.reverse()
 
-        return path
+    return path
 
 
 def h_score(n: Position, goal: Position) -> float:
