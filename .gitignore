@@ -1,1 +1,14 @@
+<<<<<<< HEAD
 Fly_in.pdf
+=======
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+>>>>>>> ab84996377440b6c08459380ed8df1d450a126aa

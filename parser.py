@@ -1,36 +1,161 @@
 import glob
 import inquirer  # type: ignore[import-untyped]
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 from functools import wraps
+from dataclasses import dataclass
+from enum import StrEnum, auto
+
 
 from graph import Graph
-from zone import Zone
-from location import Position
+from zone import Zone, ZoneType, Position
+from connection import Connection
+from draw_map import PlotlyVisualizer
 
 
 type ExportFn = Callable[[str, int], Any]
+type SetterFn = Callable[[ConfigKeyWords, list, int], Any]
 
-exporters = dict[str, ExportFn] = {}
+
+class ConfigKeyWords(StrEnum):
+    ZONE = auto()
+    CONNECTION = auto()
+    NAME = auto()
+    ORIGIN = auto()
+    TO = auto()
+    NB_DRONE = auto()
+
+
+EXPORTERS: dict[str, ExportFn] = {}
+SETTERS: dict[ConfigKeyWords, SetterFn] = {}
+SEPARATORS = (":", "[", "=")
+
+
+@dataclass
+class ParseState:
+    zones: list[dict]
+    zone_names: set[str]
+    connections: list[dict]
+    connection_seen: set[frozenset[str]]
+    nb_drones: int
+
+
+@dataclass
+class ParseUpdate:
+    target: str
+    data: dict
+
+
 class ParserError(Exception):
+    """base"""
+
     pass
+
+
+@dataclass
+class FormatError(ParserError):
+    line_num: int
+    detail: str
+
+    def __str__(self) -> str:
+        return f"Line {self.line_num}: {self.detail}"
+
+
+@dataclass
+class HubFormatError(ParserError):
+    line_num: int
+    detail: str
+
+    def __str__(self) -> str:
+        return (
+            f"Line {self.line_num}: {self.detail}. "
+            "Expected 'hub: hub-name <int> <int> [zone=<optional> "
+            "color=<optional> max_drones=<positive int>]'"
+        )
+
+
+@dataclass
+class ConnectionFormatError(ParserError):
+    line_num: int
+    detail: str
+
+    def __str__(self) -> str:
+        return (
+            f"Line {self.line_num}: {self.detail} "
+            "Expected 'connection: <name of hub>-<name of hub> "
+            "[Optionl-<max_link_capacity=positive int>]'"
+        )
+
+
+@dataclass
+class UnknownKeyError(ParserError):
+    line_num: int
+    keyword: str
+
+    def __str__(self):
+        return f"Line {self.line_num}: Unknown keyword '{self.keyword}"
+
+
+@dataclass
+class ValueRangeError(ParserError):
+    line_num: int
+    field: str
+    detail: str
+
+    def __str__(self):
+        return f"Line {self.line_num}: [{self.field}] {self.detail}"
+
+
+@dataclass
+class DupplicatedConnectionError(ParserError):
+    line_num: int
+    fig: list
+    detail: str
+
+    def __str__(self):
+        return f"Line {self.line_num}: [{self.fig}] {self.detail} "
+
+
+@dataclass
+class ZoneNameError(ParserError):
+    line_num: int
+    fig: str
+    detail: str
+
+    def __str__(self):
+        return f"Line {self.line_num}: [{self.fig}] {self.detail} "
+
 
 def register_exporter(key_word: str) -> Callable:
     def decorator(func: ExportFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            # print(f"DEBUG:::{func.__name__}")
             return func(*args, **kwargs)
-        exporters[key_word] = wrapper
+
+        EXPORTERS[key_word] = wrapper
         return wrapper
+
     return decorator
 
 
+def setter_machine(name: ConfigKeyWords) -> Callable:
+    def decorator(func: SetterFn) -> ExportFn:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> list:
+            return func(*args, **kwargs)
 
-def select_file(cls) -> str:
+        SETTERS[name] = wrapper
+        return wrapper
+
+    return decorator
+
+
+def select_file() -> str:
     dir_path = glob.glob("maps/**/*.txt")
     question = [
         inquirer.List(
-            "file",
+            "Choose a file",
             message="which file would like to try?",
             choices=dir_path,
         )
@@ -38,151 +163,240 @@ def select_file(cls) -> str:
     answers = inquirer.prompt(question)
     if not answers:
         raise ValueError("No file selected")
-    selected = answers["file"]
-    print(f"The file  {selected} is selected")
+    selected = answers["Choose a file"]
+    print(f"The file {selected} is selected")
     return selected
 
 
 def parser(file_path: str) -> Graph:
-    graph = Graph()
+    state = ParseState(
+        zones=[],
+        zone_names=set(),
+        connections=[],
+        connection_seen=set(),
+        nb_drones=0,
+    )
+    to_list = []
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            for line_num, line in enumerate(f, start=1):
+        with open(file_path, "r") as f:
+            for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#") or line.startswith("\n"):
                     continue
-                export_data(line, line_num, graph)
+
+                fetched = export_data(line, line_num)
+                match fetched.target:
+                    case ConfigKeyWords.ZONE:
+                        handle_zone(state, fetched, line_num)
+                    case ConfigKeyWords.CONNECTION:
+                        handle_connection(state, fetched, line_num)
+                    case ConfigKeyWords.NB_DRONE:
+                        state.nb_drones = fetched.data["nb_drones"]
+
     except FileNotFoundError:
-        raise ValueError(f"file not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
-    return graph
+    return Graph(
+        zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
+        connections=[Connection(**cnc) for cnc in state.connections],
+        nb_drone=state.nb_drones,
+    )
 
-def export_data(line: str, line_num: int, graph) -> Graph:
-    title, sep, info = line.partition(':')
-    exporter = exporters.get(title)
-    if exporter is None:
-        raise ParserError(f"Line: {line_num} no exporter found in the format")
-    exporter(line, line_num)
 
-@register_exporter("nb_drones:")
-def _nb_drone(self, line: str, line_num: int) -> int:
+def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
+    name = fetched.data[ConfigKeyWords.NAME]
+    if name in state.zone_names:
+        raise ZoneNameError(
+            line_num=line_num,
+            fig=name,
+            detail="is dupplicated"
+        )
+    state.zone_names.add(name)
+    state.zones.append(fetched.data)
+
+
+def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
+    pair = frozenset(
+        {
+            fetched.data[ConfigKeyWords.ORIGIN],
+            fetched.data[ConfigKeyWords.TO],
+        }
+    )
+    if pair in state.connection_seen:
+        raise DupplicatedConnectionError(
+            line_num=line_num, fig=list(pair), detail="already exist"
+        )
+    state.connection_seen.add(pair)
+    state.connections.append(fetched.data)
+
+
+def export_data(line: str, line_num: int) -> ParseUpdate:
+    for sep in SEPARATORS:
+        if sep in line:
+            title, _, info = line.partition(sep)
+            exporter = EXPORTERS.get(title)
+            if exporter is None:
+                raise HubFormatError(
+                    line_num=line_num,
+                    detail="unexpected format"
+                )
+            fetched_data = exporter(line, line_num)
+            return fetched_data
+    raise HubFormatError(line_num=line_num, detail="unexpected format")
+
+
+@register_exporter("nb_drones")
+def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
     words = line.split()
     if len(words) != 2:
-        raise ParserError(f"Line {line_num}: expected form"
-                         f" 'nb_drones: <positive num>'")
-    try:
-        nb_drone = int(words[1])
-    except (ValueError, TypeError):
-        raise ParserError(f"Line {line_num}: THe format is not as expected")
-    if nb_drone <= 0:
-        raise ParserError("Number of drones must be positive")
-    return nb_drone
+        raise FormatError(
+            line_num=line_num,
+            detail="the for mat is expected:: 'nb_drones: <positive number>'",
+        )
+    nb_drones = int(words[1])
+    if nb_drones <= 0:
+        raise ValueRangeError(
+            line_num=line_num, field="nb_drones", detail="must be positive"
+        )
+    return ParseUpdate(
+        target=ConfigKeyWords.NB_DRONE,
+        data={"nb_drones": nb_drones}
+    )
+
 
 @register_exporter("start_hub")
-@register_exporter("hub")
 @register_exporter("end_hub")
-def _properhub(self, line: str, line_num: int) -> Zone:
-    zone_dict: Zone = {}
+@register_exporter("hub")
+def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
+    if "[" not in line and "]" not in line:
+        raise HubFormatError(
+            line_num=line_num,
+            detail="Attribute is not given"
+        )
+    hub, _, attrb = line.partition("[")
+    hubs = hub.split()
+    if len(hubs) != 4:
+        raise HubFormatError(line_num=line_num, detail="wrong format")
+    role = hubs[0].strip(":")
+    role, _, _ = role.partition("_")
+    name = hubs[1].strip()
+    x = int(hubs[2])
+    y = int(hubs[3])
+    attribute_dict = _get_attribute(attrb, line_num)
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data=(
+            {
+                "zone_role": role,
+                ConfigKeyWords.NAME: name,
+                "position": Position(x=x, y=y),
+            } | attribute_dict
+        ),
+    )
+
+
+def _get_attribute(atrbt: str, line_num: int) -> dict:
+    attribute_dict = {}
+    atrbt = atrbt.strip("]")
+    atrbts = atrbt.split()
+    for word in atrbts:
+        update = export_data(word, line_num)
+        attribute_dict.update(update.data)
+    return attribute_dict
+
+
+@register_exporter("color")
+def _get_color(line: str, line_num: int) -> ParseUpdate:
+    title, _, info = line.partition("=")
+    return ParseUpdate(target=ConfigKeyWords.ZONE, data={title: info})
+
+
+@register_exporter(ConfigKeyWords.ZONE)
+def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
+    """
+    check one of those attributes ex)zone=restricted color=darkred max_drones=1
+    """
+    _, _, info = line.partition("=")
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"zone_type": ZoneType(info)}
+    )
+
+
+@register_exporter("max_drones")
+def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
+    _, _, nb_drone = line.partition("=")
     try:
-        # if int(line.find("]")) != len(line):
-        if not line.endswith("]"):
-            raise ParserError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
-        if "[" in line and "]" in line:
-            strt = line.find('[')
-            attrbt = line[strt:]
-            # dict_attribt = self._get_attribute(attrbt)
-        new_line = line[:strt]
-        print(new_line)
-        words = new_line.split()
-        if len(words) != 4:
-            raise ParserError(f"Line {line_num}: Expected format is '<optional_>hub: <name_of_hub> <num> <num>  [attributes]'")
-    except ValueError:
-        raise ('Some error')
-    
-    return zone_dict
-
-@register_exporter("connection")
-def _get_connection_info(line: str, line_num: int) -> None:
-    words = line.split()
-    if len(words) < 2:
-        raise ParserError('wrong format')
+        nb_drones = int(nb_drone)
+    except (TypeError, ValueError):
+        raise ValueRangeError(
+            line_num=line_num,
+            field="max_drones",
+            detail="should be positive integer"
+        )
+    if nb_drones <= 0:
+        raise ValueRangeError(
+            line_num=line_num,
+            field="max_drones",
+            detail="should be positive integer"
+        )
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"max_drones": nb_drones}
+    )
 
 
-# def _get_attribute(line: str) -> None:
-#     if '[' not in line:
-#         raise
+@register_exporter(ConfigKeyWords.CONNECTION)
+def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
+    try:
+        title, _, info = line.partition(": ")
+    except ParserError:
+        raise ConnectionFormatError(line_num=line_num, detail="")
+    if "[" not in info:  # if no attributes
+        infos = info.split("-")
+        if len(infos) != 2:
+            raise ConnectionFormatError(
+                line_num=line_num,
+                detail="wrong format"
+            )
+        return ParseUpdate(
+            target=ConfigKeyWords.CONNECTION,
+            data={ConfigKeyWords.ORIGIN: infos[0],
+                  ConfigKeyWords.TO: infos[1]},
+        )
+    info, _, attrbt = info.partition(" [")  # with attributes
+    infos = info.split("-")
+    if len(infos) != 2:
+        raise ConnectionFormatError(
+            line_num=line_num, detail="wrong format in attributes"
+        )
+    attribute = _get_connection_attribute(attrbt, line_num)
+    return ParseUpdate(
+        target=ConfigKeyWords.CONNECTION,
+        data=(
+            {
+                ConfigKeyWords.ORIGIN: infos[0],
+                ConfigKeyWords.TO: infos[1]
+            } | attribute
+        ),
+    )
+
+
+#@register_exporter("max_link_capacity")
+def _get_connection_attribute(line: str, line_num: int) -> dict:
+    zones = line.strip("]")
+    title, _, max_num = zones.partition("=")
+    return {title: max_num}
+
 
 if __name__ == "__main__":
     try:
-        file_path = select_file()
-        parser(file_path)
+        file = select_file()
+        graph = parser(file)
+        print(graph)
+        PlotlyVisualizer.draw(graph)
+
     except ParserError as e:
-        print(f"Error: {e}")
-
-
-
-"""
-• Zone definition on each line using type prefixes:
-◦ start_hub:
-◦ end_hub:
-◦ hub:
-<name> <x> <y> [metadata] marks the starting zone.
-<name> <x> <y> [metadata] marks the end zone.
-<name> <x> <y> [metadata] defines a regular zone.
-◦ The connection syntax forbids dashes in zone names (see below).
-• All metadata is optional and enclosed in brackets [...] with default values:
-◦ zone=<type> (default: normal)
-◦ color=<value> (default: none)
-◦ max_drones=<number> (default: 1) - Maximum drones that can occupy this
-zone simultaneously
-◦ Tags inside brackets can appear in any order.
-"""
-
-"""
-Pydantic の BaseModel の仕組みから説明します。
-
-  ---
-  普通の Python クラスとの違い
-  
-  普通のクラスなら __init__ を自分で書きますが、BaseModel を継承すると
-   Pydantic が自動でやってくれます。
-
-  # Zone の定義
-  class Zone(BaseModel):
-      name: str
-      position: Position
-      color: str | None = None
-
-  これを見た Pydantic は自動的に：
-  - name と position は必須
-  - color はオプション（デフォルト None）
-
-  という __init__ を生成します。
-
-  ---
-  作り方
-
-  # ✅ Pydantic の作り方
-  zone = Zone(name="waypoint1", position=Position(x=1, y=0))
-
-  # ❌ dict は Zone ではない（型が違う）
-  zone_dict: Zone = {}
-  zone_dict['name'] = "waypoint1"  # Zone オブジェクトに [] 
-  でアクセスはできない
-
-  ---
-  Pydantic の嬉しいところ
-
-  作るときにバリデーションも自動で走ります：
-
-  Zone(name="waypoint1", position=Position(x="abc", y=0))
-  # → エラー！x は int でなければならない
-
-  zone.py の max_drones: int = Field(default=1, ge=1) の ge=1 は「1以
-  上でなければならない」という制約で、これも自動でチェックされます。
-
-  ---
-  まとめると、Zone(...) はクラスのインスタンスを作る呼び出しで、dict
-  の {} とは全く別物です。
-"""
+        print(e)
+        exit(1)

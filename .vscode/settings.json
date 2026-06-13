@@ -1,0 +1,13 @@
+{
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.tabSize": 4,
+    "editor.formatOnSave": true,
+    "files.trimTrailingWhitespace": true,
+
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.flake8Args": [],
+
+    "files.encoding": "utf8"
+}
