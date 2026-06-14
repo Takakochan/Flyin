@@ -193,10 +193,14 @@ def parser(file_path: str) -> Graph:
                     case ConfigKeyWords.NB_DRONE:
                         state.nb_drones = fetched.data["nb_drones"]
 
+
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
+    for zone_data in state.zones:
+        if zone_data.get("zone_role") in ("start", "end"):
+            zone_data["max_drones"] = state.nb_drones
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
         connections=[Connection(**cnc) for cnc in state.connections],
