@@ -1,12 +1,12 @@
 import heapq
 from itertools import count
 from dataclasses import dataclass
-from itertools import combinations
 import math
 
 from parser import parser, select_file
 from graph import Graph
-from zone import Zone, Position
+from zone import Zone, Position, ZoneType
+from draw_map import PlotlyVisualizer
 
 @dataclass(frozen=True)
 class Constraint():
@@ -23,16 +23,20 @@ class Conflict():
     time_step: int
 
 
-
-
-
+"""
+class ZoneType(StrEnum):
+    NORMAL = auto()
+    BLOCKED = auto()
+    RESTRICTED = auto()
+    PRIORITY = auto()
+"""
 
 
 class CBSSolver():
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
 
-    def solve(self) -> list[str]:
+    def solve(self) -> dict[int, list]:
         paths: dict[int, list] = {}
         start_zone = next(z for z in self.graph.zones.values() if z.zone_role == "start")
         goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == 'end')
@@ -40,50 +44,79 @@ class CBSSolver():
         occupance_table: dict[tuple[str, int], list[int]] = {}
 
         for drone_id in range(self.graph.nb_drone):
-            print(f"DEBUG:: dorone_id::{drone_id}")
-            path = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
+            path = a_star(
+                self.graph,
+                start_zone,
+                goal_zone,
+                constraints,
+                drone_id)
+            if not path:
+                raise ValueError(f"No path found for drone {drone_id}")
             paths[drone_id] = path
 
+        iteration = 0
         while True:
-            conflict = self.conflict_detector(paths, occupance_table)
+            occupance_table = self._set_occupance_table(paths)
+            conflict = self.conflict_detector(occupance_table)
+            print(f"iteration {iteration}")
             print(conflict)
-            print(paths)
+            # print(paths)
             if conflict is None:
+                print("succeed!!! <3")
+                print(paths)
                 return paths
             constraint = self.constraint_generator(conflict)
             for c in constraint:
                 constraints.add(c)
             for drone_id in range(self.graph.nb_drone):
-                paths[drone_id] = a_star(self.graph, start_zone,
-                                         goal_zone, constraints, drone_id)
+                path = a_star(
+                    self.graph, start_zone,
+                    goal_zone, constraints, drone_id
+                )
+                if not path:
+                    raise ValueError(f"No path found for drone {drone_id} after replanning")
+                paths[drone_id] = path
+            if iteration > 500:
+                raise RuntimeError(f"CBS did not converge. Constraints:  {constraints}")
+            iteration += 1
 
-    def _set_occupance_table(self, paths: dict) -> None:
+
+    def _set_occupance_table(self, paths: dict) -> dict:
         """
-        occupance_table = dict [tuple[zone.name, time_step], list[drone_id]]
+        occupance_table = dict [tuple[zone_name, time_step], list[drone_id]]
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for time_step, p in enumerate(path):
-                new_set = (self.graph.zones[p], time_step)
-        if new_set in occupance_table.keys():
-            occupance_table[new_set].append(drone_id)
-        else:
-            occupance_table[new_set] = [drone_id]
+                # p is zone name
+                new_set = (p, time_step)
+                if new_set in occupance_table:
+                    occupance_table[new_set].append(drone_id)
+                else:
+                    occupance_table[new_set] = [drone_id]
+        return occupance_table
 
-    def conflict_detector(self, paths: dict, occupance_table: dict) -> Conflict | None:
-        for id_a, id_b in combinations(paths.keys(), 2):
-            path_a = paths[id_a]
-            path_b = paths[id_b]
-            for time_step, (zone_a, zone_b) in enumerate(zip(path_a, path_b)):
-                if zone_a == zone_b and time_step != 0:
-                    return Conflict(id_a, id_b,
-                                    zone_a, time_step)
+    def conflict_detector(
+            self,
+            occupance_table: dict
+    ) -> Conflict | None:
+        for (zone_name, time_step), dron_ids in occupance_table.items():
+            if time_step == 0:
+                continue
+            zone = self.graph.zones[zone_name]
+            if zone.zone_role in ('start', 'end'):
+                continue
+            max_drons = self.graph.zones[zone_name].max_drones
+            if max_drons < len(dron_ids):
+                return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         return None
 
     def constraint_generator(self, conflict) -> set[Constraint]:
-        constraint_a = Constraint(conflict.dron_id_a, conflict.zone_name, conflict.time_step)
-        constraint_b = Constraint(conflict.dron_id_b, conflict.zone_name, conflict.time_step)
-        return (constraint_a, constraint_b)
+
+        constraint_b = Constraint(conflict.dron_id_b,
+                                  conflict.zone_name,
+                                  conflict.time_step)
+        return {constraint_b}
 
 
 def a_star(
@@ -126,6 +159,15 @@ def a_star(
             next_zone = graph.zones[next_zone_name]
             next_f = next_time_step + h_score(next_zone.position, goal.position)
             open_queue.push(next_f, next_zone, next_time_step)
+        wait_state = (current.name, time_step + 1)
+        print(f"time_step: {time_step}")
+        if wait_state not in constraint_set and wait_state not in visited_set:
+            visited_set.add(wait_state)
+            came_from[wait_state] = current_set
+            wait_f = (time_step + 1) + h_score(current.position, goal.position)
+            open_queue.push(wait_f, current, time_step + 1)
+    if current != goal:
+        return []
 
         #2. 経路の復元 — ループを抜けた後、came_from を逆向きにたどって path を作る処理がまだありません。
     current_state = (goal.name, time_step)
@@ -134,6 +176,7 @@ def a_star(
         current_state = came_from[current_state]
     path.append(start.name)
     path.reverse()
+    print(path)
     return path
 
 
@@ -163,6 +206,7 @@ if __name__ == '__main__':
     graph = parser(file)
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
+    PlotlyVisualizer.draw(graph)
     solver.solve()
     #start_zone = next(z for z in graph.zones.values() if z.zone_role == "start")
     #goal_zone = next(z for z in graph.zones.values() if z.zone_role == 'end')
