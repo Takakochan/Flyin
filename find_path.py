@@ -23,15 +23,6 @@ class Conflict():
     time_step: int
 
 
-"""
-class ZoneType(StrEnum):
-    NORMAL = auto()
-    BLOCKED = auto()
-    RESTRICTED = auto()
-    PRIORITY = auto()
-"""
-
-
 class CBSSolver():
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
@@ -111,6 +102,7 @@ class CBSSolver():
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         return None
 
+
     def constraint_generator(self, conflict) -> set[Constraint]:
 
         constraint_b = Constraint(conflict.dron_id_b,
@@ -157,8 +149,11 @@ def a_star(
             visited_set.add(new_state)
             came_from[new_state] = current_set
             next_zone = graph.zones[next_zone_name]
-            next_f = next_time_step + h_score(next_zone.position, goal.position)
+            conn = graph.connections.get((current.name, next_zone_name))
+            restrict = 1 if conn and conn.extra_step else 0
+            next_f = next_time_step + h_score(next_zone.position, goal.position) + restrict
             open_queue.push(next_f, next_zone, next_time_step)
+
         wait_state = (current.name, time_step + 1)
         print(f"time_step: {time_step}")
         if wait_state not in constraint_set and wait_state not in visited_set:
@@ -204,9 +199,10 @@ class PriorityQueue:
 if __name__ == '__main__':
     file = select_file()
     graph = parser(file)
+    print(graph)
+    PlotlyVisualizer.draw(graph)
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
-    PlotlyVisualizer.draw(graph)
     solver.solve()
     #start_zone = next(z for z in graph.zones.values() if z.zone_role == "start")
     #goal_zone = next(z for z in graph.zones.values() if z.zone_role == 'end')
