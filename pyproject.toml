@@ -4,11 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-<<<<<<< HEAD
-dependencies = []
-=======
 dependencies = ["pydantic"]
->>>>>>> ab84996377440b6c08459380ed8df1d450a126aa
 
 [tool.ruff]
 line-length = 88

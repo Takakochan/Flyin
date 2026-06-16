@@ -35,7 +35,7 @@ SEPARATORS = (":", "[", "=")
 class ParseState:
     zones: list[dict]
     zone_names: set[str]
-    connections: list[dict]
+    connections: dict[tuple, dict]
     connection_seen: set[frozenset[str]]
     nb_drones: int
 
@@ -172,11 +172,10 @@ def parser(file_path: str) -> Graph:
     state = ParseState(
         zones=[],
         zone_names=set(),
-        connections=[],
+        connections={},
         connection_seen=set(),
         nb_drones=0,
     )
-    to_list = []
     try:
         with open(file_path, "r") as f:
             for line_num, line in enumerate(f, 1):
@@ -193,7 +192,6 @@ def parser(file_path: str) -> Graph:
                     case ConfigKeyWords.NB_DRONE:
                         state.nb_drones = fetched.data["nb_drones"]
 
-
     except FileNotFoundError:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
@@ -201,9 +199,10 @@ def parser(file_path: str) -> Graph:
     for zone_data in state.zones:
         if zone_data.get("zone_role") in ("start", "end"):
             zone_data["max_drones"] = state.nb_drones
+    print(state.connections)
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
-        connections=[Connection(**cnc) for cnc in state.connections],
+        connections={key: Connection(**cnc) for key, cnc in state.connections.items()},
         nb_drone=state.nb_drones,
     )
 
@@ -227,12 +226,13 @@ def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
             fetched.data[ConfigKeyWords.TO],
         }
     )
+    #connection_dict = {fetched.data[ConfigKeyWords.TO]: fetched.data}
     if pair in state.connection_seen:
         raise DupplicatedConnectionError(
             line_num=line_num, fig=list(pair), detail="already exist"
         )
     state.connection_seen.add(pair)
-    state.connections.append(fetched.data)
+    state.connections[(fetched.data[ConfigKeyWords.ORIGIN], fetched.data[ConfigKeyWords.TO])] = fetched.data
 
 
 def export_data(line: str, line_num: int) -> ParseUpdate:

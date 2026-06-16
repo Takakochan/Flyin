@@ -33,8 +33,9 @@ class PlotlyVisualizer():
         fig = go.Figure()
         edge_x = []
         edge_y = []
+        edge_hover = []
 
-        for connection in graph.connections:
+        for name_to, connection in graph.connections.items():
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
             edge_x.extend([
@@ -47,6 +48,8 @@ class PlotlyVisualizer():
                 to.position.y,
                 None,
             ])
+            text = f"max_link_capacity: {connection.max_link_capacity}"
+            edge_hover.extend([text, text, None])
         fig.add_trace(
             go.Scatter(
                 x=edge_x,
@@ -54,9 +57,30 @@ class PlotlyVisualizer():
                 mode="lines",
                 opacity=.5,
                 line=dict(color="gray"),
-                hoverinfo="skip",
+                hovertext=edge_hover,
+                hoverinfo="text",
             )
         )
+
+        mid_x = []
+        mid_y = []
+        mid_hover = []
+        for _, connection in graph.connections.items():
+            origin = graph.zones[connection.origin]
+            to = graph.zones[connection.to]
+            mid_x.append((origin.position.x + to.position.x) / 2)
+            mid_y.append((origin.position.y + to.position.y) / 2)
+            mid_hover.append(f"max_link_capacity:　{connection.max_link_capacity}")
+
+        fig.add_trace(go.Scatter(
+            x=mid_x,
+            y=mid_y,
+            mode="markers",
+            marker=dict(size=80, color="gray", opacity=0.01),
+            hovertext=mid_hover,
+            hoverinfo="text",
+            showlegend=False,
+        ))
         sizes = [
             (80, "red"),
             (64, "yellow"),
@@ -76,7 +100,8 @@ class PlotlyVisualizer():
                             opacity=.5,
                             marker=dict(size=size, color=color),
                             showlegend=False,
-                            hoverinfo="skip",
+                            hovertext=f"{zone.name}<br>max_drones: {zone.max_drones}",
+                            hoverinfo="text",
                         )
                     )
             else:
@@ -88,6 +113,8 @@ class PlotlyVisualizer():
                         opacity=.7,
                         marker=dict(size=60, color=zone.color),  # ← ここ重要
                         showlegend=False,
+                        hovertext=f"{zone.name}<br>max_drones: {zone.max_drones}",
+                        hoverinfo="text",
                     )
                 )
         fig.show()
