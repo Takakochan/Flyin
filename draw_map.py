@@ -1,8 +1,10 @@
 # %%
 # import matplotlib.pyplot as plt
-from graph import Graph
 import plotly.graph_objects as go
 
+
+from graph import Graph
+from zone import ZoneType
 
 # class DrawConnection():
 #     @staticmethod
@@ -29,13 +31,13 @@ import plotly.graph_objects as go
 
 class PlotlyVisualizer():
     @staticmethod
-    def draw(graph: Graph) -> None:
+    def draw(graph: Graph, paths: dict) -> None:
         fig = go.Figure()
         edge_x = []
         edge_y = []
         edge_hover = []
 
-        for name_to, connection in graph.connections.items():
+        for _, connection in graph.connections.items():
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
             edge_x.extend([
@@ -117,4 +119,56 @@ class PlotlyVisualizer():
                         hoverinfo="text",
                     )
                 )
+
+        drone_trace_idx = len(fig.data)
+        max_t = max(len(p) for p in paths.values())
+
+        def _drone_scatter(t):
+            x, y, hover, labels = [], [], [], []
+            for drone_id, path in sorted(paths.items()):
+                zone_name = path[t] if t < len(path) else path[-1]
+                zone = graph.zones[zone_name]
+                x.append(zone.position.x)
+                y.append(zone.position.y)
+                hover.append(f"Drone {drone_id}<br>Zone: {zone_name}<br>t={t}")
+                labels.append(str(drone_id))
+            return go.Scatter(
+                x=x, y=y, mode="markers+text",
+                marker=dict(size=30, color="red"),
+                text=labels,
+                textfont=dict(color="red", size=10),
+                textposition="middle center",
+                hovertext=hover, hoverinfo="text",
+                name="drones", showlegend=False,
+            )
+
+        fig.add_trace(_drone_scatter(0))
+
+        fig.frames = [
+            go.Frame(data=[_drone_scatter(t)], name=str(t), traces=[drone_trace_idx])
+            for t in range(max_t)
+        ]
+
+        fig.update_layout(
+            updatemenus=[dict(
+                type="buttons", showactive=False,
+                buttons=[
+                    dict(label="Play", method="animate",
+                         args=[None, {"frame": {"duration": 600, "redraw": True},
+                                      "fromcurrent": True}]),
+                    dict(label="Pause", method="animate",
+                         args=[[None], {"frame": {"duration": 0, "redraw": False},
+                                        "mode": "immediate"}]),
+                ],
+            )],
+            sliders=[dict(
+                steps=[dict(
+                    method="animate",
+                    args=[[str(t)], {"frame": {"duration": 0, "redraw": True},
+                                     "mode": "immediate"}],
+                    label=str(t),
+                ) for t in range(max_t)],
+                currentvalue=dict(prefix="t = "),
+            )],
+        )
         fig.show()

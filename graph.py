@@ -12,14 +12,15 @@ class Graph(BaseModel):
     adjacency: dict[str, list[str]] = {}
     """dict[origin.name, list[to.name]]"""
 
-    @model_validator(mode='after')
-    def make_adjencency(self) -> 'Graph':
+    @model_validator(mode="after")
+    def make_adjencency(self) -> "Graph":
         for conn in self.connections.values():
             self.adjacency.setdefault(conn.origin, []).append(conn.to)
             # self.adjacency.setdefault(conn.to, []).append(conn.origin)
         for key, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
-                conn = next(c for (origin, to),
-                            c in self.connections.items() if to == zone.name)
+                conn = next(
+                    c for (origin, to), c in self.connections.items() if to == zone.name
+                )
                 conn.extra_step = True
         return self

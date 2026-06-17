@@ -11,7 +11,7 @@ from zone import Zone, ZoneType, ZoneRole, ZoneState, Position
 type ExportFn = Callable[[str, int], Any]
 
 EXPORTERS: dict[str, ExportFn] = {}
-SEPARATORS = (':', '[]', '=')
+SEPARATORS = (":", "[]", "=")
 
 
 class ParserError(Exception):
@@ -24,6 +24,7 @@ def register_exporter(key_word: str) -> Callable:
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             print(func.__name__)
             return func(*args, **kwargs)
+
         EXPORTERS[key_word] = wrapper
         return wrapper
 
@@ -53,7 +54,7 @@ def parser(file_path: str) -> Graph:
         with open(file_path, "r") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if not line or line.startswith('#') or line.startswith('\n'):
+                if not line or line.startswith("#") or line.startswith("\n"):
                     continue
                 print(line_num)
                 export_data(line, line_num)
@@ -74,15 +75,13 @@ def export_data(line: str, line_num: int) -> None:
             exporter(line, line_num)
             return
     raise ParserError(f"No valid separator found: {line}")
-    
-    
 
 
 @register_exporter("nb_drones")
 def _get_nb_drones(line: str, line_num: int) -> int:
     words = line.split()
     if len(words) != 2:
-        raise ParserError('wrong format')
+        raise ParserError("wrong format")
     nb_drones = int(words[1])
     if nb_drones <= 0:
         raise ParserError(f"Line {line_num}: Number of drones must be positive")
@@ -94,18 +93,18 @@ def _get_nb_drones(line: str, line_num: int) -> int:
 @register_exporter("end_hub")
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int) -> Zone:
-    if '[' not in line and ']' not in line:
+    if "[" not in line and "]" not in line:
         raise ParserError(f"Line {line_num}: Attribute is not given")
-    hub, _, attrb = line.partition('[')
+    hub, _, attrb = line.partition("[")
     hubs = hub.split()
     if len(hubs) < 4:
         raise ParserError(f"Line {line_num}: missing information")
     # print(hubs[0])
-    if hubs[0] == 'start_hub:':
+    if hubs[0] == "start_hub:":
         role = ZoneRole.START
-    elif hubs[0] == 'end_hub:':
+    elif hubs[0] == "end_hub:":
         role = ZoneRole.END
-    elif hubs[0] == 'hub:':
+    elif hubs[0] == "hub:":
         role = ZoneRole.HUB
     name = hubs[1].strip()
     x = int(hubs[2])
@@ -119,12 +118,12 @@ def _get_zone_info(line: str, line_num: int) -> Zone:
 def _get_connection_info(line: str, line_num: int) -> None:
     words = line.split()
     if len(words) < 2:
-        raise ParserError('wrong format')
+        raise ParserError("wrong format")
 
 
 def _get_attribute(atrbt: str, line_num: int) -> None:
-    print('_get_attribute')
-    atrbt = atrbt.strip(']')
+    print("_get_attribute")
+    atrbt = atrbt.strip("]")
     atrbts = atrbt.split()
     for word in atrbts:
         export_data(word, line_num)
@@ -133,7 +132,10 @@ def _get_attribute(atrbt: str, line_num: int) -> None:
 # @register_exporter("color")
 # def _get_color():
 
-@register_exporter("zone")  #check one of those zone=restricted color=darkred max_drones=1
+
+@register_exporter(
+    "zone"
+)  # check one of those zone=restricted color=darkred max_drones=1
 def _get_zone_atrbt(word: str, line_num: int) -> ZoneType:
     return ZoneType(word)
 
@@ -147,6 +149,7 @@ def _get_max_drone_nb(word: str, line_num: int) -> Zone:
     if nb_drones < 0:
         raise ValueError(f"Line {line_num}: should be positive number")
     return Zone(max_drones=nb_drones)
+
 
 """
 class Graph(BaseModel):
