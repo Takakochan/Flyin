@@ -29,8 +29,11 @@ class CTNode:
     paths: dict[int, list[str]]
 
     @property
-    def const(self) -> float:
+    def cost(self) -> float:
         return sum(len(p) for p in self.paths.values())
+
+    def __lt__(self, other: "CTNone") -> bool:
+        return self.cost < other.cost
 
 
 class CBSSolver:
@@ -46,12 +49,22 @@ class CBSSolver:
         }
         root = CTNode(frozenset(), root_paths)
         open_list = [root]  # heapq で cost 順
-
+        visited_nodes: set[frozenset] = set()
+        iteration = 0
         while open_list:
             node = heapq.heappop(open_list)  # 最小コストを展開
+            if node.constraints in visited_nodes:
+                continue
+            visited_nodes.add(node.constraints)
+            print(f"CBS iter={iteration}, open_list size={len(open_list)}")
+            iteration += 1
+            if iteration > 10000000:
+                raise RuntimeError("CBS timeout")
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table)
             if conflict is None:
+                print(f"SOLVED at iter={iteration}!")
+                print(node.paths)
                 PlotlyVisualizer.draw(self.graph, node.paths)
                 return node.paths  # 衝突なし → 解
 
@@ -60,10 +73,10 @@ class CBSSolver:
                 new_constraints = node.constraints | {Constraint(drone_id,
                                                                  conflict.zone_name, conflict.time_step)}
                 new_path = a_star(self.graph, start_zone, goal_zone, new_constraints, drone_id)
-            if new_path:
-                new_paths = {**node.paths, drone_id: new_path}
-                child = CTNode(new_constraints, new_paths)
-                heapq.heappush(open_list, child)
+                if new_path:
+                    new_paths = {**node.paths, drone_id: new_path}
+                    child = CTNode(new_constraints, new_paths)
+                    heapq.heappush(open_list, child)
 
     # def solve(self) -> dict[int, list]:
     #     paths: dict[int, list] = {}
@@ -113,7 +126,8 @@ class CBSSolver:
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for time_step, p in enumerate(path):
-                # p is zone name
+                if p.startswith("extra_"):
+                    continue
                 new_set = (p, time_step)
                 if new_set in occupance_table:
                     occupance_table[new_set].append(drone_id)
@@ -126,6 +140,8 @@ class CBSSolver:
             if time_step == 0:
                 continue
             zone = self.graph.zones[zone_name]
+            if zone is None:
+                continue
             if zone.zone_role in ("start", "end"):
                 continue
             max_drons = self.graph.zones[zone_name].max_drones
@@ -157,7 +173,6 @@ def a_star(
     }  # 制約のあるzoneとタイムステップの記録
     open_queue = PriorityQueue()
     open_queue.push(h_score(start.position, goal.position), start, time_step)
-
     while not open_queue.is_empty():
         current, time_step = open_queue.pop()
         if current == goal:
@@ -172,7 +187,10 @@ def a_star(
         #     continue
         for next_zone_name in neighbours:
             next_time_step = time_step + 1
-            new_state = (next_zone_name, next_time_step)
+            conn = graph.connections.get((current.name, next_zone_name))
+            restrict = 1 if conn and conn.extra_step else 0
+            extra_time = next_time_step + restrict
+            new_state = (next_zone_name, extra_time)
             if new_state in constraint_set:
                 continue
             if new_state in visited_set:
@@ -180,20 +198,18 @@ def a_star(
             visited_set.add(new_state)
             came_from[new_state] = current_set
             next_zone = graph.zones[next_zone_name]
-            conn = graph.connections.get((current.name, next_zone_name))
-            restrict = 1 if conn and conn.extra_step else 0
             next_f = (
                 next_time_step + h_score(next_zone.position, goal.position) + restrict
             )
-            open_queue.push(next_f, next_zone, next_time_step)
-
-        wait_state = (current.name, time_step + 1)
-        print(f"time_step: {time_step}")
-        if wait_state not in constraint_set and wait_state not in visited_set:
-            visited_set.add(wait_state)
-            came_from[wait_state] = current_set
-            wait_f = (time_step + 1) + h_score(current.position, goal.position)
-            open_queue.push(wait_f, current, time_step + 1)
+            open_queue.push(next_f, next_zone, extra_time)
+        max_t = len(graph.zones) * graph.nb_drone * 3
+        if time_step + 1 < max_t:
+            wait_state = (current.name, time_step + 1)
+            if neighbours and wait_state not in constraint_set and wait_state not in visited_set:
+                visited_set.add(wait_state)
+                came_from[wait_state] = current_set
+                wait_f = (time_step + 1) + h_score(current.position, goal.position)
+                open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
 
@@ -206,34 +222,13 @@ def a_star(
             extra = f"extra_{current_state[0]}"
             path.append(current_state[0])
             path.append(extra)
-            x = current_state
-
-
-
-
-            """
-            adding extra zone in the graph.zones[dron_id]
-            """
-
-            graph.zones[extra] = Zone(
-                zone_role=ZoneRole.EXTRA,
-                name=extra,
-                position=Position(x=1, y=4),
-                zone_type=ZoneType.NORMAL,
-                color=None,
-                max_drones=1
-                )
-
-
-
-
+            current_state = came_from[current_state]
 
         else:
             path.append(current_state[0])
-        current_state = came_from[current_state]
+            current_state = came_from[current_state]
     path.append(start.name)
     path.reverse()
-    print(path)
     return path
 
 

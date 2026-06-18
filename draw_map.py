@@ -32,11 +32,13 @@ from zone import ZoneType
 class PlotlyVisualizer():
     @staticmethod
     def draw(graph: Graph, paths: dict) -> None:
+        """
+        Display connection edges
+        """
         fig = go.Figure()
         edge_x = []
         edge_y = []
         edge_hover = []
-
         for _, connection in graph.connections.items():
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
@@ -57,22 +59,30 @@ class PlotlyVisualizer():
                 x=edge_x,
                 y=edge_y,
                 mode="lines",
-                opacity=.5,
+                opacity=.3,
                 line=dict(color="gray"),
                 hovertext=edge_hover,
                 hoverinfo="text",
-            )
-        )
+            ))
 
+        """
+        Hover info for connection edges and zone
+        """
         mid_x = []
         mid_y = []
         mid_hover = []
-        for _, connection in graph.connections.items():
+        edges = []
+
+        """
+        connection edges
+        """
+        for name, connection in graph.connections.items():
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
             mid_x.append((origin.position.x + to.position.x) / 2)
             mid_y.append((origin.position.y + to.position.y) / 2)
-            mid_hover.append(f"max_link_capacity:　{connection.max_link_capacity}")
+            mid_hover.append(f"max_link_capacity: {connection.max_link_capacity}")
+            edges.append(name)
 
         fig.add_trace(go.Scatter(
             x=mid_x,
@@ -83,6 +93,10 @@ class PlotlyVisualizer():
             hoverinfo="text",
             showlegend=False,
         ))
+
+        """
+        zone
+        """
         sizes = [
             (80, "red"),
             (64, "yellow"),
@@ -98,10 +112,12 @@ class PlotlyVisualizer():
                         go.Scatter(
                             x=[zone.position.x],
                             y=[zone.position.y],
-                            mode="markers",
+                            mode="markers + text",
                             opacity=.5,
                             marker=dict(size=size, color=color),
                             showlegend=False,
+                            textposition='top center',
+                            texttemplate=zone.name,
                             hovertext=f"{zone.name}<br>max_drones: {zone.max_drones}",
                             hoverinfo="text",
                         )
@@ -111,11 +127,14 @@ class PlotlyVisualizer():
                     go.Scatter(
                         x=[zone.position.x],
                         y=[zone.position.y],
-                        mode="markers",
+                        mode="markers+text",
                         opacity=.7,
                         marker=dict(size=60, color=zone.color),  # ← ここ重要
+                        textposition='top center',
+                        text=zone.name,
+                        textfont=dict(size=20, color='blue'),
                         showlegend=False,
-                        hovertext=f"{zone.name}<br>max_drones: {zone.max_drones}",
+                        hovertext=f"max_drones: {zone.max_drones}<br>zone_type: {zone.zone_type}",
                         hoverinfo="text",
                     )
                 )
@@ -123,20 +142,31 @@ class PlotlyVisualizer():
         drone_trace_idx = len(fig.data)
         max_t = max(len(p) for p in paths.values())
 
+        """
+        Dysplay for drones
+        """
         def _drone_scatter(t):
             x, y, hover, labels = [], [], [], []
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
+                if zone_name.startswith("extra_"):
+                    zone_name = zone_name[len("extra_"):]
                 zone = graph.zones[zone_name]
-                x.append(zone.position.x)
-                y.append(zone.position.y)
+
+                if zone.zone_type == ZoneType.RESTRICTED:
+                    x.append(zone.position.x - 0.2)
+                    y.append(zone.position.y)
+                    zone.zone_type = ZoneType.NORMAL
+                else:
+                    x.append(zone.position.x)
+                    y.append(zone.position.y)
                 hover.append(f"Drone {drone_id}<br>Zone: {zone_name}<br>t={t}")
-                labels.append(str(drone_id))
+                labels.append(f"D{drone_id}")
             return go.Scatter(
                 x=x, y=y, mode="markers+text",
-                marker=dict(size=30, color="red"),
+                marker=dict(size=30, color="red", symbol="cross"),
                 text=labels,
-                textfont=dict(color="red", size=10),
+                textfont=dict(color="white", size=15),
                 textposition="middle center",
                 hovertext=hover, hoverinfo="text",
                 name="drones", showlegend=False,
