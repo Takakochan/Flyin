@@ -1,4 +1,5 @@
 import heapq
+from collections import deque
 from itertools import count
 from dataclasses import dataclass
 import math
@@ -32,7 +33,7 @@ class CTNode:
     def cost(self) -> float:
         return sum(len(p) for p in self.paths.values())
 
-    def __lt__(self, other: "CTNone") -> bool:
+    def __lt__(self, other: "CTNode") -> bool:
         return self.cost < other.cost
 
 
@@ -43,8 +44,9 @@ class CBSSolver:
     def solve(self):
         start_zone = next(z for z in self.graph.zones.values() if z.zone_role == "start")
         goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
+        h_scores = h_step_score(self.graph, goal_zone)
         root_paths = {
-            d: a_star(self.graph, start_zone, goal_zone, frozenset(), d)
+            d: a_star(self.graph, start_zone, goal_zone, frozenset(), d, h_scores)
             for d in range(self.graph.nb_drone)
         }
         root = CTNode(frozenset(), root_paths)
@@ -58,7 +60,7 @@ class CBSSolver:
             visited_nodes.add(node.constraints)
             print(f"CBS iter={iteration}, open_list size={len(open_list)}")
             iteration += 1
-            if iteration > 10000000:
+            if iteration > 10000:
                 raise RuntimeError("CBS timeout")
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table)
@@ -72,22 +74,36 @@ class CBSSolver:
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
                 new_constraints = node.constraints | {Constraint(drone_id,
                                                                  conflict.zone_name, conflict.time_step)}
-                new_path = a_star(self.graph, start_zone, goal_zone, new_constraints, drone_id)
+                new_path = a_star(self.graph, start_zone, goal_zone, new_constraints, drone_id, h_scores)
                 if new_path:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
 
-    # def solve(self) -> dict[int, list]:
-    #     paths: dict[int, list] = {}
-    #     start_zone = next(
-    #         z for z in self.graph.zones.values() if z.zone_role == "start"
-    #     )
-    #     goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
-    #     constraints: set[Constraint] = set()
-    #     occupance_table: dict[tuple[str, int], list[int]] = {}
+    def solve2(self) -> dict[int, list]:
+        paths: dict[int, list] = {}
+        start_zone = next(
+            z for z in self.graph.zones.values() if z.zone_role == "start"
+        )
+        goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
+        h_scores = h_step_score(self.graph, goal_zone)
+        for drone_id in range(self.graph.nb_drone):
+            occupancy = self._set_occupance_table(paths)
+            constraints: set[Constraint] = set()
+            for (zone_name, t), occupants in occupancy.items():
+                zone = self.graph.zones.get(zone_name)
+                if zone is None or zone.zone_role in ("start", "end"):
+                    continue
+                if len(occupants) >= zone.max_drones:
+                    constraints.add(Constraint(drone_id, zone_name, t))
+            path = a_star(self.graph, start_zone, goal_zone, set(constraints), drone_id, h_scores)
+            if not path:
+                raise ValueError(f"No path for drone {drone_id}")
+            paths[drone_id] = path
+        print(paths)
+        PlotlyVisualizer.draw(self.graph, paths)
+        return paths
 
-    #     for drone_id in range(self.graph.nb_drone):
     #         path = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
     #         if not path:
     #             raise ValueError(f"No path found for drone {drone_id}")
@@ -158,7 +174,7 @@ class CBSSolver:
 
 
 def a_star(
-    graph: Graph, start: Zone, goal: Zone, constraints: set[Constraint], drone_id: int
+    graph: Graph, start: Zone, goal: Zone, constraints: set[Constraint], drone_id: int, h_scores: dict[str, int]
 ) -> list[str]:
 
     time_step: int = 0
@@ -172,7 +188,7 @@ def a_star(
         (c.zone_name, c.time_step) for c in constraints if c.dron_id == drone_id
     }  # 制約のあるzoneとタイムステップの記録
     open_queue = PriorityQueue()
-    open_queue.push(h_score(start.position, goal.position), start, time_step)
+    open_queue.push(h_scores.get(start.name, len(graph.zones)), start, time_step)
     while not open_queue.is_empty():
         current, time_step = open_queue.pop()
         if current == goal:
@@ -186,9 +202,13 @@ def a_star(
         #     print(f"Neigbours: {neighbours}")
         #     continue
         for next_zone_name in neighbours:
+            next_zone = graph.zones[next_zone_name]
+            if next_zone.zone_type == ZoneType.BLOCKED:
+                continue
             next_time_step = time_step + 1
             conn = graph.connections.get((current.name, next_zone_name))
             restrict = 1 if conn and conn.extra_step else 0
+            priority = -0.1 if next_zone.zone_type == ZoneType.PRIORITY else 0
             extra_time = next_time_step + restrict
             new_state = (next_zone_name, extra_time)
             if new_state in constraint_set:
@@ -197,9 +217,9 @@ def a_star(
                 continue
             visited_set.add(new_state)
             came_from[new_state] = current_set
-            next_zone = graph.zones[next_zone_name]
+
             next_f = (
-                next_time_step + h_score(next_zone.position, goal.position) + restrict
+                next_time_step + h_scores.get(next_zone_name, 999) + restrict + priority
             )
             open_queue.push(next_f, next_zone, extra_time)
         max_t = len(graph.zones) * graph.nb_drone * 3
@@ -208,7 +228,7 @@ def a_star(
             if neighbours and wait_state not in constraint_set and wait_state not in visited_set:
                 visited_set.add(wait_state)
                 came_from[wait_state] = current_set
-                wait_f = (time_step + 1) + h_score(current.position, goal.position)
+                wait_f = (time_step + 1) + h_scores.get(current.name, len(graph.zones))
                 open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
@@ -230,6 +250,22 @@ def a_star(
     path.append(start.name)
     path.reverse()
     return path
+
+
+def h_step_score(graph: Graph, goal: Zone) -> dict[str, int]:
+    dist = {goal.name: 0}
+    queue = deque([goal.name])
+    reverse_adj: dict[str, list[str]] = {}
+    for origin, neigbours in graph.adjacency.items():
+        for num in neigbours:
+            reverse_adj.setdefault(num, []).append(origin)
+    while queue:
+        current = queue.popleft()
+        for prev in reverse_adj.get(current, []):
+            if prev not in dist:
+                dist[prev] = dist[current] + 1
+                queue.append(prev)
+    return dist
 
 
 def h_score(n: Position, goal: Position) -> float:
@@ -258,7 +294,10 @@ if __name__ == "__main__":
     print(graph)
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
-    solver.solve()
+    try:
+        solver.solve()
+    except RuntimeError:
+        solver.solve2()
     # start_zone = next(z for z in graph.zones.values() if z.zone_role == "start")
     # goal_zone = next(z for z in graph.zones.values() if z.zone_role == 'end')
     # constraints: set[Constraint] = set()

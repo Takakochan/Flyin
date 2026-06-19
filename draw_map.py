@@ -1,7 +1,4 @@
-# %%
-# import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-
 
 from graph import Graph
 from zone import ZoneType
@@ -146,7 +143,7 @@ class PlotlyVisualizer():
         Dysplay for drones
         """
         def _drone_scatter(t):
-            x, y, hover, labels = [], [], [], []
+            x, y, hover, labels, zone_names = [], [], [], [], []
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
                 if zone_name.startswith("extra_"):
@@ -154,14 +151,19 @@ class PlotlyVisualizer():
                 zone = graph.zones[zone_name]
 
                 if zone.zone_type == ZoneType.RESTRICTED:
-                    x.append(zone.position.x - 0.2)
-                    y.append(zone.position.y)
-                    zone.zone_type = ZoneType.NORMAL
+                    prev_name = path[t - 1] if t > 0 else zone_name
+                    if prev_name.startswith("extra_"):
+                        prev_name = prev_name[len("extra_"):]
+                    previous_zone = graph.zones[prev_name]
+                    x.append((zone.position.x + previous_zone.position.x) / 2)
+                    y.append((zone.position.y + previous_zone.position.y) / 2)
+
                 else:
                     x.append(zone.position.x)
                     y.append(zone.position.y)
                 hover.append(f"Drone {drone_id}<br>Zone: {zone_name}<br>t={t}")
                 labels.append(f"D{drone_id}")
+                zone_names.append(zone_name)
             return go.Scatter(
                 x=x, y=y, mode="markers+text",
                 marker=dict(size=30, color="red", symbol="cross"),
