@@ -1,2 +1,0 @@
-class Drone:
-    id: str
