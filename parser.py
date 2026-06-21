@@ -73,6 +73,15 @@ class HubFormatError(ParserError):
             "color=<optional> max_drones=<positive int>]'"
         )
 
+@dataclass
+class HubAttributeDupplicatedError(ParserError):
+    line_num: int
+
+    def __str__(self) -> str:
+        return (
+            f" Line {self.line_num}: "
+            "Each attribute should be one"
+        )
 
 @dataclass
 class ConnectionFormatError(ParserError):
@@ -130,7 +139,6 @@ def register_exporter(key_word: str) -> Callable:
     def decorator(func: ExportFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            # print(f"DEBUG:::{func.__name__}")
             return func(*args, **kwargs)
 
         EXPORTERS[key_word] = wrapper
@@ -247,13 +255,13 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
 
 @register_exporter("nb_drones")
 def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
-    words = line.split()
-    if len(words) != 2:
+    words = line.split(":", 1)
+    if len(words) != 2 or not words[1].strip():
         raise FormatError(
             line_num=line_num,
-            detail="the for mat is expected:: 'nb_drones: <positive number>'",
+            detail="expected format: 'nb_drones: <positive number>'",
         )
-    nb_drones = int(words[1])
+    nb_drones = int(words[1].strip())
     if nb_drones <= 0:
         raise ValueRangeError(
             line_num=line_num, field="nb_drones", detail="must be positive"
@@ -292,9 +300,20 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
 
 def _get_attribute(atrbt: str, line_num: int) -> dict:
     attribute_dict = {}
+    a_zone = 0
+    a_color = 0
+    a_drone = 0
     atrbt = atrbt.strip("]")
     atrbts = atrbt.split()
     for word in atrbts:
+        if word.startswith("zone"):
+            a_zone += 1
+        elif word.startswith("color"):
+            a_color += 1
+        elif word.startswith("max_drones"):
+            a_drone += 1
+        if any(i >= 2 for i in [a_drone, a_color, a_zone]):
+            raise HubAttributeDupplicatedError(line_num=line_num)
         update = export_data(word, line_num)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -315,6 +334,7 @@ def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
     return ParseUpdate(target=ConfigKeyWords.ZONE, data={"zone_type": ZoneType(info)})
 
 
+# TO DO, should have format error as well
 @register_exporter("max_drones")
 def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
     _, _, nb_drone = line.partition("=")
@@ -322,7 +342,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
         nb_drones = int(nb_drone)
     except (TypeError, ValueError):
         raise ValueRangeError(
-            line_num=line_num, field="max_drones", detail="should be positive integer"
+            line_num=line_num, field="max_drones", detail="expected format 'attribute=<positive int>'"
         )
     if nb_drones <= 0:
         raise ValueRangeError(

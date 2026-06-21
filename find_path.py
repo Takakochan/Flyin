@@ -24,6 +24,7 @@ class Conflict:
     zone_name: str
     time_step: int
 
+
 @dataclass
 class CTNode:
     constraints: frozenset[Constraint]
@@ -42,7 +43,9 @@ class CBSSolver:
         self.graph = graph
 
     def solve(self):
-        start_zone = next(z for z in self.graph.zones.values() if z.zone_role == "start")
+        start_zone = next(
+            z for z in self.graph.zones.values() if z.zone_role == "start"
+        )
         goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
         h_scores = h_step_score(self.graph, goal_zone)
         root_paths = {
@@ -72,9 +75,17 @@ class CBSSolver:
 
             # 2つの子ノードを生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
-                new_constraints = node.constraints | {Constraint(drone_id,
-                                                                 conflict.zone_name, conflict.time_step)}
-                new_path = a_star(self.graph, start_zone, goal_zone, new_constraints, drone_id, h_scores)
+                new_constraints = node.constraints | {
+                    Constraint(drone_id, conflict.zone_name, conflict.time_step)
+                }
+                new_path = a_star(
+                    self.graph,
+                    start_zone,
+                    goal_zone,
+                    new_constraints,
+                    drone_id,
+                    h_scores,
+                )
                 if new_path:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
@@ -96,44 +107,15 @@ class CBSSolver:
                     continue
                 if len(occupants) >= zone.max_drones:
                     constraints.add(Constraint(drone_id, zone_name, t))
-            path = a_star(self.graph, start_zone, goal_zone, set(constraints), drone_id, h_scores)
+            path = a_star(
+                self.graph, start_zone, goal_zone, set(constraints), drone_id, h_scores
+            )
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
         print(paths)
         PlotlyVisualizer.draw(self.graph, paths)
         return paths
-
-    #         path = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
-    #         if not path:
-    #             raise ValueError(f"No path found for drone {drone_id}")
-    #         paths[drone_id] = path
-
-    #     iteration = 0
-    #     while True:
-    #         occupance_table = self._set_occupance_table(paths)
-    #         conflict = self.conflict_detector(occupance_table)
-    #         print(f"iteration {iteration}")
-    #         print(conflict)
-    #         # print(paths)
-    #         if conflict is None:
-    #             print("succeed!!! <3")
-    #             print(paths)
-    #             PlotlyVisualizer.draw(self.graph, paths)
-    #             return paths
-    #         constraint = self.constraint_generator(conflict)
-    #         for c in constraint:
-    #             constraints.add(c)
-    #         for drone_id in range(self.graph.nb_drone):
-    #             path = a_star(self.graph, start_zone, goal_zone, constraints, drone_id)
-    #             if not path:
-    #                 raise ValueError(
-    #                     f"No path found for drone {drone_id} after replanning"
-    #                 )
-    #             paths[drone_id] = path
-    #         if iteration > 5000:
-    #             raise RuntimeError(f"CBS did not converge. Constraints:  {constraints}")
-    #         iteration += 1
 
     def _set_occupance_table(self, paths: dict) -> dict:
         """
@@ -174,7 +156,12 @@ class CBSSolver:
 
 
 def a_star(
-    graph: Graph, start: Zone, goal: Zone, constraints: set[Constraint], drone_id: int, h_scores: dict[str, int]
+    graph: Graph,
+    start: Zone,
+    goal: Zone,
+    constraints: set[Constraint],
+    drone_id: int,
+    h_scores: dict[str, int],
 ) -> list[str]:
 
     time_step: int = 0
@@ -225,7 +212,11 @@ def a_star(
         max_t = len(graph.zones) * graph.nb_drone * 3
         if time_step + 1 < max_t:
             wait_state = (current.name, time_step + 1)
-            if neighbours and wait_state not in constraint_set and wait_state not in visited_set:
+            if (
+                neighbours
+                and wait_state not in constraint_set
+                and wait_state not in visited_set
+            ):
                 visited_set.add(wait_state)
                 came_from[wait_state] = current_set
                 wait_f = (time_step + 1) + h_scores.get(current.name, len(graph.zones))
@@ -295,12 +286,6 @@ if __name__ == "__main__":
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
-        solver.solve()
+        solver.solve2()
     except RuntimeError:
         solver.solve2()
-    # start_zone = next(z for z in graph.zones.values() if z.zone_role == "start")
-    # goal_zone = next(z for z in graph.zones.values() if z.zone_role == 'end')
-    # constraints: set[Constraint] = set()
-    # path = a_star(graph, start_zone, goal_zone, constraints)
-
-    # print(path)

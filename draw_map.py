@@ -26,7 +26,7 @@ from zone import ZoneType
 #         plt.show()
 
 
-class PlotlyVisualizer():
+class PlotlyVisualizer:
     @staticmethod
     def draw(graph: Graph, paths: dict) -> None:
         """
@@ -39,16 +39,20 @@ class PlotlyVisualizer():
         for _, connection in graph.connections.items():
             origin = graph.zones[connection.origin]
             to = graph.zones[connection.to]
-            edge_x.extend([
-                origin.position.x,
-                to.position.x,
-                None,
-            ])
-            edge_y.extend([
-                origin.position.y,
-                to.position.y,
-                None,
-            ])
+            edge_x.extend(
+                [
+                    origin.position.x,
+                    to.position.x,
+                    None,
+                ]
+            )
+            edge_y.extend(
+                [
+                    origin.position.y,
+                    to.position.y,
+                    None,
+                ]
+            )
             text = f"max_link_capacity: {connection.max_link_capacity}"
             edge_hover.extend([text, text, None])
         fig.add_trace(
@@ -56,11 +60,12 @@ class PlotlyVisualizer():
                 x=edge_x,
                 y=edge_y,
                 mode="lines",
-                opacity=.3,
+                opacity=0.3,
                 line=dict(color="gray"),
                 hovertext=edge_hover,
                 hoverinfo="text",
-            ))
+            )
+        )
 
         """
         Hover info for connection edges and zone
@@ -81,15 +86,17 @@ class PlotlyVisualizer():
             mid_hover.append(f"max_link_capacity: {connection.max_link_capacity}")
             edges.append(name)
 
-        fig.add_trace(go.Scatter(
-            x=mid_x,
-            y=mid_y,
-            mode="markers",
-            marker=dict(size=80, color="gray", opacity=0.01),
-            hovertext=mid_hover,
-            hoverinfo="text",
-            showlegend=False,
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=mid_x,
+                y=mid_y,
+                mode="markers",
+                marker=dict(size=80, color="gray", opacity=0.01),
+                hovertext=mid_hover,
+                hoverinfo="text",
+                showlegend=False,
+            )
+        )
 
         """
         zone
@@ -110,10 +117,10 @@ class PlotlyVisualizer():
                             x=[zone.position.x],
                             y=[zone.position.y],
                             mode="markers + text",
-                            opacity=.5,
+                            opacity=0.5,
                             marker=dict(size=size, color=color),
                             showlegend=False,
-                            textposition='top center',
+                            textposition="top center",
                             texttemplate=zone.name,
                             hovertext=f"{zone.name}<br>max_drones: {zone.max_drones}",
                             hoverinfo="text",
@@ -125,11 +132,11 @@ class PlotlyVisualizer():
                         x=[zone.position.x],
                         y=[zone.position.y],
                         mode="markers+text",
-                        opacity=.7,
+                        opacity=0.7,
                         marker=dict(size=60, color=zone.color),  # ← ここ重要
-                        textposition='top center',
+                        textposition="top center",
                         text=zone.name,
-                        textfont=dict(size=20, color='blue'),
+                        textfont=dict(size=20, color="blue"),
                         showlegend=False,
                         hovertext=f"max_drones: {zone.max_drones}<br>zone_type: {zone.zone_type}",
                         hoverinfo="text",
@@ -142,18 +149,19 @@ class PlotlyVisualizer():
         """
         Dysplay for drones
         """
+
         def _drone_scatter(t):
             x, y, hover, labels, zone_names = [], [], [], [], []
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
                 if zone_name.startswith("extra_"):
-                    zone_name = zone_name[len("extra_"):]
+                    zone_name = zone_name[len("extra_") :]
                 zone = graph.zones[zone_name]
 
                 if zone.zone_type == ZoneType.RESTRICTED:
                     prev_name = path[t - 1] if t > 0 else zone_name
                     if prev_name.startswith("extra_"):
-                        prev_name = prev_name[len("extra_"):]
+                        prev_name = prev_name[len("extra_") :]
                     previous_zone = graph.zones[prev_name]
                     x.append((zone.position.x + previous_zone.position.x) / 2)
                     y.append((zone.position.y + previous_zone.position.y) / 2)
@@ -165,13 +173,17 @@ class PlotlyVisualizer():
                 labels.append(f"D{drone_id}")
                 zone_names.append(zone_name)
             return go.Scatter(
-                x=x, y=y, mode="markers+text",
+                x=x,
+                y=y,
+                mode="markers+text",
                 marker=dict(size=30, color="red", symbol="cross"),
                 text=labels,
                 textfont=dict(color="white", size=15),
                 textposition="middle center",
-                hovertext=hover, hoverinfo="text",
-                name="drones", showlegend=False,
+                hovertext=hover,
+                hoverinfo="text",
+                name="drones",
+                showlegend=False,
             )
 
         fig.add_trace(_drone_scatter(0))
@@ -182,25 +194,54 @@ class PlotlyVisualizer():
         ]
 
         fig.update_layout(
-            updatemenus=[dict(
-                type="buttons", showactive=False,
-                buttons=[
-                    dict(label="Play", method="animate",
-                         args=[None, {"frame": {"duration": 600, "redraw": True},
-                                      "fromcurrent": True}]),
-                    dict(label="Pause", method="animate",
-                         args=[[None], {"frame": {"duration": 0, "redraw": False},
-                                        "mode": "immediate"}]),
-                ],
-            )],
-            sliders=[dict(
-                steps=[dict(
-                    method="animate",
-                    args=[[str(t)], {"frame": {"duration": 0, "redraw": True},
-                                     "mode": "immediate"}],
-                    label=str(t),
-                ) for t in range(max_t)],
-                currentvalue=dict(prefix="t = "),
-            )],
+            updatemenus=[
+                dict(
+                    type="buttons",
+                    showactive=False,
+                    buttons=[
+                        dict(
+                            label="Play",
+                            method="animate",
+                            args=[
+                                None,
+                                {
+                                    "frame": {"duration": 600, "redraw": True},
+                                    "fromcurrent": True,
+                                },
+                            ],
+                        ),
+                        dict(
+                            label="Pause",
+                            method="animate",
+                            args=[
+                                [None],
+                                {
+                                    "frame": {"duration": 0, "redraw": False},
+                                    "mode": "immediate",
+                                },
+                            ],
+                        ),
+                    ],
+                )
+            ],
+            sliders=[
+                dict(
+                    steps=[
+                        dict(
+                            method="animate",
+                            args=[
+                                [str(t)],
+                                {
+                                    "frame": {"duration": 0, "redraw": True},
+                                    "mode": "immediate",
+                                },
+                            ],
+                            label=str(t),
+                        )
+                        for t in range(max_t)
+                    ],
+                    currentvalue=dict(prefix="t = "),
+                )
+            ],
         )
         fig.show()
