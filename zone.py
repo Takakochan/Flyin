@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import StrEnum, Enum, auto
 from typing import NamedTuple
 from pydantic import BaseModel, Field
@@ -15,6 +16,15 @@ class PositionValueError(Exception):
         self.value = value
         self.message = message
         super().__init__(message)
+
+
+@dataclass
+class ZoneTypeNotExistError(ValueError):
+    line_num: int
+    value: str
+
+    def __str__(self) -> str:
+        return f"Line {self.line_num} invalid zone_type {self. value}"
 
 
 class ZoneType(StrEnum):
@@ -42,3 +52,11 @@ class Zone(BaseModel):
 class ZoneState(Enum):
     AVAILABLE = auto()
     OCCUPIED = auto()
+
+
+def validate_zone(info: str, line_num: int) -> str:
+    try:
+        zone = ZoneType(info)
+    except ValueError:
+        raise ZoneTypeNotExistError(line_num, info)
+    return zone

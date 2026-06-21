@@ -7,14 +7,14 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 
 
+from domain.color import validate_color
 from graph import Graph
-from zone import Zone, ZoneType, ZoneRole, Position
+from zone import Zone, ZoneType, ZoneRole, Position, validate_zone
 from connection import Connection
-from draw_map import PlotlyVisualizer
 
 
-type ExportFn = Callable[[str, int], Any]
-type SetterFn = Callable[[ConfigKeyWords, list, int], Any]
+type ExportFn = Callable[[str, int], ParseUpdate]
+type SetterFn = Callable[[ConfigKeyWords, list[Any], int], Any]
 
 
 class ConfigKeyWords(StrEnum):
@@ -33,7 +33,7 @@ SEPARATORS = (":", "[", "=")
 
 @dataclass
 class ParseState:
-    zones: list[dict]
+    zones: list[dict[str, Any]]
     zone_names: set[str]
     connections: dict[tuple, dict]
     connection_seen: set[frozenset[str]]
@@ -43,7 +43,8 @@ class ParseState:
 @dataclass
 class ParseUpdate:
     target: str
-    data: dict
+    data: dict[str, Any]
+    line_num: int
 
 
 class ParserError(Exception):
@@ -59,6 +60,17 @@ class FormatError(ParserError):
 
     def __str__(self) -> str:
         return f"Line {self.line_num}: {self.detail}"
+
+
+@dataclass
+class HubAttributeError(ParserError):
+    line_num: int
+
+    def __str__(self) -> str:
+        return (
+            f"Line {self.line_num}: Expected atributes ex) "
+            "[zone=restricted color=maroon max_drones=2] Max three attributes"
+        )
 
 
 @dataclass
@@ -141,7 +153,7 @@ def register_exporter(key_word: str) -> Callable:
 def setter_machine(name: ConfigKeyWords) -> Callable:
     def decorator(func: SetterFn) -> ExportFn:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> list:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             return func(*args, **kwargs)
 
         SETTERS[name] = wrapper
@@ -162,7 +174,7 @@ def select_file() -> str:
     answers = inquirer.prompt(question)
     if not answers:
         raise ValueError("No file selected")
-    selected = answers["Choose a file"]
+    selected: str = answers["Choose a file"]
     print(f"The file {selected} is selected")
     return selected
 
@@ -201,7 +213,9 @@ def parser(file_path: str) -> Graph:
             zone_data["max_drones"] = state.nb_drones
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
-        connections={key: Connection(**cnc) for key, cnc in state.connections.items()},
+        connections={
+            key: Connection(**cnc) for key, cnc in state.connections.items()
+        },
         nb_drone=state.nb_drones,
     )
 
@@ -209,7 +223,9 @@ def parser(file_path: str) -> Graph:
 def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
-        raise ZoneNameError(line_num=line_num, fig=name, detail="is dipplicated")
+        raise ZoneNameError(
+            line_num=line_num, fig=name, detail="is dipplicated"
+        )
     state.zone_names.add(name)
     state.zones.append(fetched.data)
 
@@ -237,9 +253,10 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
             title, _, info = line.partition(sep)
             exporter = EXPORTERS.get(title)
             if exporter is None:
-                raise HubFormatError(line_num=line_num, detail="unexpected format")
-            fetched_data = exporter(line, line_num)
-            return fetched_data
+                raise HubFormatError(
+                    line_num=line_num, detail="unexpected format"
+                )
+            return exporter(line, line_num)
     raise HubFormatError(line_num=line_num, detail="unexpected format")
 
 
@@ -256,8 +273,11 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
         raise ValueRangeError(
             line_num=line_num, field="nb_drones", detail="must be positive"
         )
-    return ParseUpdate(target=ConfigKeyWords.NB_DRONE,
-                       data={"nb_drones": nb_drones})
+    return ParseUpdate(
+        target=ConfigKeyWords.NB_DRONE,
+        data={"nb_drones": nb_drones},
+        line_num=line_num
+    )
 
 
 @register_exporter("start_hub")
@@ -265,8 +285,9 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     if "[" not in line and "]" not in line:
-        raise HubFormatError(line_num=line_num,
-                             detail="Attribute is not given")
+        raise HubFormatError(
+            line_num=line_num, detail="Attribute is not given"
+        )
     hub, _, attrb = line.partition("[")
     hubs = hub.split()
     if len(hubs) != 4:
@@ -284,17 +305,31 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
                 "zone_role": role,
                 ConfigKeyWords.NAME: name,
                 "position": Position(x=x, y=y),
-            }
-            | attribute_dict
+            } | attribute_dict
         ),
+        line_num=line_num
     )
 
 
 def _get_attribute(atrbt: str, line_num: int) -> dict:
     attribute_dict = {}
+    a_zone = 0
+    a_color = 0
+    a_drone = 0
     atrbt = atrbt.strip("]")
     atrbts = atrbt.split()
+    if len(atrbts) > 3:
+        print("debudg")
+        raise HubAttributeError(line_num)
     for word in atrbts:
+        if word.startswith("zone"):
+            a_zone += 1
+        elif word.startswith("color"):
+            a_color += 1
+        elif word.startswith("max_drones"):
+            a_drone += 1
+        if any(i >= 2 for i in [a_drone, a_color, a_zone]):
+            raise HubAttributeError(line_num)
         update = export_data(word, line_num)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -303,17 +338,24 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
 @register_exporter("color")
 def _get_color(line: str, line_num: int) -> ParseUpdate:
     title, _, info = line.partition("=")
-    return ParseUpdate(target=ConfigKeyWords.ZONE, data={title: info})
+    color = validate_color(info, line_num)
+    return ParseUpdate(target=ConfigKeyWords.ZONE,
+                       data={"color": color},
+                       line_num=line_num)
 
 
-@register_exporter(ConfigKeyWords.ZONE)
+@register_exporter("zone")
 def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
     """
     check one of those attributes ex)zone=restricted color=darkred max_drones=1
     """
     _, _, info = line.partition("=")
-    return ParseUpdate(target=ConfigKeyWords.ZONE,
-                       data={"zone_type": ZoneType(info)})
+    zone = validate_zone(info, line_num)
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"zone_type": ZoneType(zone)},
+        line_num=line_num
+    )
 
 
 @register_exporter("max_drones")
@@ -331,8 +373,11 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
             line_num=line_num, field="max_drones",
             detail="should be positive integer"
         )
-    return ParseUpdate(target=ConfigKeyWords.ZONE,
-                       data={"max_drones": nb_drones})
+    return ParseUpdate(
+        target=ConfigKeyWords.ZONE,
+        data={"max_drones": nb_drones},
+        line_num=line_num
+    )
 
 
 @register_exporter(ConfigKeyWords.CONNECTION)
@@ -350,6 +395,7 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
             target=ConfigKeyWords.CONNECTION,
             data={ConfigKeyWords.ORIGIN: infos[0],
                   ConfigKeyWords.TO: infos[1]},
+            line_num=line_num
         )
     info, _, attrbt = info.partition(" [")  # with attributes
     infos = info.split("-")
@@ -361,13 +407,15 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     return ParseUpdate(
         target=ConfigKeyWords.CONNECTION,
         data=(
-            {ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]} | attribute
+            {ConfigKeyWords.ORIGIN: infos[0],
+             ConfigKeyWords.TO: infos[1]} | attribute
         ),
+        line_num=line_num
     )
 
 
 @register_exporter("max_link_capacity")
-def _get_connection_attribute(line: str, line_num: int) -> dict:
+def _get_connection_attribute(line: str, line_num: int) -> dict[str, str]:
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
     return {title: max_num}
