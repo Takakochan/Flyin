@@ -1,5 +1,5 @@
 from find_path import CBSSolver
-from parser import parser, select_file
+from parser import parser, select_file, ParserError
 
 
 def main():
@@ -16,4 +16,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ParserError, ValueError) as e:
+        print(f" ParserError: {e}")

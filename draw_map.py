@@ -65,12 +65,6 @@ class PlotlyVisualizer:
                 showlegend=False,
             )
         )
-        sizes = [
-            (80, "red"),
-            (64, "yellow"),
-            (40, "green"),
-            (20, "blue"),
-        ]
         for zone in graph.zones.values():
             if zone.color == "rainbow":
                 colors = [
@@ -82,7 +76,7 @@ class PlotlyVisualizer:
                     "indigo",
                     "purple",
                 ]
-                sizes = [80, 70, 60, 50, 40, 30, 20]
+                sizes: list[int] = [80, 70, 60, 50, 40, 30, 20]
                 z_names = [zone.name, None, None, None, None, None, None]
                 for size, color, z_name in zip(sizes, colors, z_names):
                     fig.add_trace(
@@ -111,8 +105,10 @@ class PlotlyVisualizer:
                         text=zone.name,
                         textfont=dict(size=10, color="blue"),
                         showlegend=False,
-                        hovertext=(f"max_drones: {zone.max_drones}"
-                                   f"<br>zone_type: {zone.zone_type}"),
+                        hovertext=(
+                            f"max_drones: {zone.max_drones}"
+                            f"<br>zone_type: {zone.zone_type}"
+                        ),
                         hoverinfo="text",
                     )
                 )
@@ -124,7 +120,7 @@ class PlotlyVisualizer:
         Dysplay for drones
         """
 
-        def _drone_scatter(t):
+        def _drone_scatter(t: int) -> go.Scatter:
             x, y, hover, labels, zone_names = [], [], [], [], []
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
@@ -160,7 +156,8 @@ class PlotlyVisualizer:
 
         fig.add_trace(_drone_scatter(0))
         fig.frames = [
-            go.Frame(data=[_drone_scatter(t)], name=str(t),
+            go.Frame(data=[_drone_scatter(t)],
+                     name=str(t),
                      traces=[drone_trace_idx])
             for t in range(max_t)
         ]

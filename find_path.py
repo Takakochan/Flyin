@@ -45,8 +45,9 @@ class CBSSolver:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
-        goal_zone = next(z for z in self.graph.zones.values()
-                         if z.zone_role == "end")
+        goal_zone = next(
+            z for z in self.graph.zones.values() if z.zone_role == "end"
+        )
         h_scores = h_step_score(self.graph, goal_zone)
         root_paths = {
             d: a_star(self.graph, start_zone,
@@ -77,7 +78,8 @@ class CBSSolver:
             # 2つの子ノードを生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
                 new_constraints = node.constraints | {
-                    Constraint(drone_id, conflict.zone_name,
+                    Constraint(drone_id,
+                               conflict.zone_name,
                                conflict.time_step)
                 }
                 new_path = a_star(
@@ -98,8 +100,9 @@ class CBSSolver:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
-        goal_zone = next(z for z in self.graph.zones.values()
-                         if z.zone_role == "end")
+        goal_zone = next(
+            z for z in self.graph.zones.values() if z.zone_role == "end"
+        )
         h_scores = h_step_score(self.graph, goal_zone)
         for drone_id in range(self.graph.nb_drone):
             occupancy = self._set_occupance_table(paths)
@@ -176,20 +179,18 @@ def a_star(
     neighbours = []
     visited_set: set[tuple[str, int]] = set()
     constraint_set = {
-        (c.zone_name, c.time_step) for c in constraints
-        if c.dron_id == drone_id
+        (c.zone_name, c.time_step)
+        for c in constraints if c.dron_id == drone_id
     }  # 制約のあるzoneとタイムステップの記録
     open_queue = PriorityQueue()
-    open_queue.push(h_scores.get(start.name,
-                                 len(graph.zones)), start, time_step)
+    open_queue.push(h_scores.get(start.name, len(graph.zones)),
+                    start, time_step)
     while not open_queue.is_empty():
         current, time_step = open_queue.pop()
         if current == goal:
             break
         current_set = (current.name, time_step)
-        neighbours = graph.adjacency.get(
-            current.name, []
-        )
+        neighbours = graph.adjacency.get(current.name, [])
         # Neighbours which are connected from current zone
         for next_zone_name in neighbours:
             next_zone = graph.zones[next_zone_name]
@@ -208,21 +209,23 @@ def a_star(
             visited_set.add(new_state)
             came_from[new_state] = current_set
 
-            next_f = (
-                next_time_step + h_scores.get(next_zone_name, 999) + restrict + priority
+            next_f = sum([
+                next_time_step, h_scores.get(next_zone_name, 999),
+                restrict, priority]
             )
             open_queue.push(next_f, next_zone, extra_time)
         max_t = len(graph.zones) * graph.nb_drone * 3
         if time_step + 1 < max_t:
             wait_state = (current.name, time_step + 1)
             if (
-                neighbours
-                and wait_state not in constraint_set
-                and wait_state not in visited_set
+                neighbours and wait_state
+                not in constraint_set and wait_state not in visited_set
             ):
                 visited_set.add(wait_state)
                 came_from[wait_state] = current_set
-                wait_f = (time_step + 1) + h_scores.get(current.name, len(graph.zones))
+                wait_f = (time_step + 1) + h_scores.get(
+                    current.name, len(graph.zones)
+                )
                 open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
@@ -267,8 +270,13 @@ class PriorityQueue:
         self._counter = count()
 
     def push(self, f_score: float, zone: Zone, time_step: int) -> None:
-        heapq.heappush(self._heap, (f_score, next(self._counter),
-                                    zone, time_step))
+        heapq.heappush(
+            self._heap,
+            (f_score,
+             next(self._counter),
+             zone,
+             time_step)
+        )
 
     def pop(self) -> tuple[Zone, int]:
         f_score, _, zone, time_step = heapq.heappop(self._heap)
