@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class Position(NamedTuple):
-    x: int
-    y: int
+    x: float
+    y: float
 
 
 class PositionValueError(Exception):
@@ -36,6 +36,7 @@ class ZoneType(StrEnum):
 
 class ZoneRole(StrEnum):
     START = auto()
+    EXTRA = auto()
     HUB = auto()
     END = auto()
 

@@ -3,6 +3,7 @@ from collections import deque
 from itertools import count
 from dataclasses import dataclass
 
+
 from parser import parser, select_file
 from graph import Graph
 from zone import Zone, ZoneType

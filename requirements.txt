@@ -1,3 +1,7 @@
 inquirer
 pydantic
 plotly
+<<<<<<< HEAD
+=======
+pandas
+>>>>>>> 3b2c00bf9770a154cca12ac03b61bfc062d3107c
