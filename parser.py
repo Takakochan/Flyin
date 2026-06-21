@@ -85,15 +85,6 @@ class HubFormatError(ParserError):
             "color=<optional> max_drones=<positive int>]'"
         )
 
-@dataclass
-class HubAttributeDupplicatedError(ParserError):
-    line_num: int
-
-    def __str__(self) -> str:
-        return (
-            f" Line {self.line_num}: "
-            "Each attribute should be one"
-        )
 
 @dataclass
 class ConnectionFormatError(ParserError):
@@ -193,7 +184,6 @@ def parser(file_path: str) -> Graph:
         zones=[],
         zone_names=set(),
         connections={},
-        connections={},
         connection_seen=set(),
         nb_drones=0,
     )
@@ -247,15 +237,11 @@ def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
             fetched.data[ConfigKeyWords.TO],
         }
     )
-    # connection_dict = {fetched.data[ConfigKeyWords.TO]: fetched.data}
     if pair in state.connection_seen:
         raise DupplicatedConnectionError(
             line_num=line_num, fig=list(pair), detail="already exist"
         )
     state.connection_seen.add(pair)
-    state.connections[
-        (fetched.data[ConfigKeyWords.ORIGIN], fetched.data[ConfigKeyWords.TO])
-    ] = fetched.data
     state.connections[
         (fetched.data[ConfigKeyWords.ORIGIN], fetched.data[ConfigKeyWords.TO])
     ] = fetched.data
@@ -276,13 +262,13 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
 
 @register_exporter("nb_drones")
 def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
-    words = line.split(":", 1)
-    if len(words) != 2 or not words[1].strip():
+    words = line.split()
+    if len(words) != 2:
         raise FormatError(
             line_num=line_num,
-            detail="expected format: 'nb_drones: <positive number>'",
+            detail="the for mat is expected:: 'nb_drones: <positive number>'",
         )
-    nb_drones = int(words[1].strip())
+    nb_drones = int(words[1])
     if nb_drones <= 0:
         raise ValueRangeError(
             line_num=line_num, field="nb_drones", detail="must be positive"
@@ -319,8 +305,7 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
                 "zone_role": role,
                 ConfigKeyWords.NAME: name,
                 "position": Position(x=x, y=y),
-            }
-            | attribute_dict
+            } | attribute_dict
         ),
         line_num=line_num
     )
@@ -328,9 +313,6 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
 
 def _get_attribute(atrbt: str, line_num: int) -> dict:
     attribute_dict = {}
-    a_zone = 0
-    a_color = 0
-    a_drone = 0
     a_zone = 0
     a_color = 0
     a_drone = 0
@@ -376,7 +358,6 @@ def _get_zone_atrbt(line: str, line_num: int) -> ParseUpdate:
     )
 
 
-# TO DO, should have format error as well
 @register_exporter("max_drones")
 def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
     _, _, nb_drone = line.partition("=")
@@ -387,7 +368,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
             line_num=line_num, field="max_drones",
             detail="should be positive integer"
         )
-    if nb_drones <= 0:
+    if nb_drones < 0:
         raise ValueRangeError(
             line_num=line_num, field="max_drones",
             detail="should be positive integer"
