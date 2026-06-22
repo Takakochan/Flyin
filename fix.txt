@@ -1,0 +1,38 @@
+❯   5. _get_nb_drones line 272 and _get_zone_info lines 299–300 — bare int() conversions: No
+  try/except
+    around int(words[1]), int(hubs[2]), or int(hubs[3]). A non-integer input raises an unhandled
+    ValueError with no line-number context.
+    6. _get_connection_info line 393 — hub names containing - break parsing: info.split("-") on
+    north-hub-south-hub gives 4 tokens, not 2, triggering a spurious ConnectionFormatError.
+
+    Dead / misleading code
+
+    7. _get_connection_info lines 390–391 — try/except ParserError is unreachable: str.partition()
+    never raises ParserError, so the except block is dead code.I don't know what exactly I should
+  do. don't write code tell me how to fix in English
+
+● #5 — Bare int() conversions
+
+  Wrap each int() call in a try/except ValueError. When it fails, raise a FormatError (or
+  ValueRangeError) that includes the line_num so the user knows exactly which line had the bad value.
+  The key point is to catch the exception at the spot where you have line_num in scope, not let it
+  bubble up as a raw Python error.
+
+  ---
+  #6 — Hub names with - break connection parsing
+
+  split("-") splits on every -, so a name like north-hub causes too many tokens. The fix is to only
+  split on the first - and the last -, or better: split with a maxsplit=1 to get exactly two parts.
+  But maxsplit=1 only handles the left side — you'd need to think about what the format actually
+  guarantees. The cleanest approach is to change the map file format to use a different separator
+  between the two hub names (e.g. -> or a space), so - in names is unambiguous. If you can't change
+  the format, you need a stricter parsing rule — for example, require the separator to be - (with
+  spaces) so bare - inside names doesn't interfere.
+
+  ---
+  #7 — Dead try/except ParserError
+
+  Simply remove the try/except block entirely. str.partition() is a plain string method that can only
+  raise TypeError if given a non-string separator (which can't happen here since ": " is a literal).
+  There's nothing to catch, so the try and except lines are just noise. The title, _, info =
+  line.partition(": ") line can stand on its own.

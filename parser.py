@@ -65,12 +65,13 @@ class FormatError(ParserError):
 @dataclass
 class HubAttributeError(ParserError):
     line_num: int
-
+    details: str
     def __str__(self) -> str:
         return (
-            f"Line {self.line_num}: Expected atributes ex) "
+            f"Line {self.line_num}: {self.details} Expected atributes ex) "
             "[zone=restricted color=maroon max_drones=2] Max three attributes"
         )
+
 
 
 @dataclass
@@ -105,7 +106,7 @@ class UnknownKeyError(ParserError):
     keyword: str
 
     def __str__(self):
-        return f"Line {self.line_num}: Unknown keyword '{self.keyword}"
+        return f"Line {self.line_num}: Unknown keyword '{self.keyword}'"
 
 
 @dataclass
@@ -253,11 +254,11 @@ def export_data(line: str, line_num: int) -> ParseUpdate:
             title, _, info = line.partition(sep)
             exporter = EXPORTERS.get(title)
             if exporter is None:
-                raise HubFormatError(
-                    line_num=line_num, detail="unexpected format"
+                raise UnknownKeyError(
+                    line_num=line_num, keyword=title
                 )
             return exporter(line, line_num)
-    raise HubFormatError(line_num=line_num, detail="unexpected format")
+    raise UnknownKeyError(line_num=line_num, keyword=title)
 
 
 @register_exporter("nb_drones")
@@ -266,7 +267,7 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
     if len(words) != 2:
         raise FormatError(
             line_num=line_num,
-            detail="the for mat is expected:: 'nb_drones: <positive number>'",
+            detail="the format is expected:: 'nb_drones: <positive number>'",
         )
     nb_drones = int(words[1])
     if nb_drones <= 0:
@@ -284,9 +285,9 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
 @register_exporter("end_hub")
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
-    if "[" not in line and "]" not in line:
+    if "[" not in line or "]" not in line:
         raise HubFormatError(
-            line_num=line_num, detail="Attribute is not given"
+            line_num=line_num, detail="'[' or ']' is not given"
         )
     hub, _, attrb = line.partition("[")
     hubs = hub.split()
@@ -298,6 +299,8 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     x = int(hubs[2])
     y = int(hubs[3])
     attribute_dict = _get_attribute(attrb, line_num)
+    if len(attribute_dict) <= 1:
+        raise HubAttributeError(line_num, "Attribute is not given")
     return ParseUpdate(
         target=ConfigKeyWords.ZONE,
         data=(
@@ -319,8 +322,7 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
     atrbt = atrbt.strip("]")
     atrbts = atrbt.split()
     if len(atrbts) > 3:
-        print("debudg")
-        raise HubAttributeError(line_num)
+        raise HubAttributeError(line_num, "")
     for word in atrbts:
         if word.startswith("zone"):
             a_zone += 1
@@ -329,7 +331,8 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeError(line_num)
+            raise HubAttributeError(line_num, "")
+
         update = export_data(word, line_num)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -368,7 +371,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
             line_num=line_num, field="max_drones",
             detail="should be positive integer"
         )
-    if nb_drones < 0:
+    if nb_drones <= 0:
         raise ValueRangeError(
             line_num=line_num, field="max_drones",
             detail="should be positive integer"
@@ -414,21 +417,9 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     )
 
 
-@register_exporter("max_link_capacity")
 def _get_connection_attribute(line: str, line_num: int) -> dict[str, str]:
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
     return {title: max_num}
 
 
-# if __name__ == "__main__":
-#     try:
-#         file = select_file()
-#         graph = parser(file)
-#         print(graph)
-#         # DrawConnection.draw(graph)
-#         PlotlyVisualizer.draw(graph)
-
-#     except ParserError as e:
-#         print(e)
-#         exit(1)
