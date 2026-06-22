@@ -3,6 +3,7 @@ from collections import deque
 from itertools import count
 from dataclasses import dataclass
 
+
 from parser import parser, select_file
 from graph import Graph
 from zone import Zone, ZoneType
@@ -37,11 +38,15 @@ class CTNode:
         return self.cost < other.cost
 
 
+type Path = list[str]
+type Paths = dict[int, Path]
+
+
 class CBSSolver:
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
 
-    def solve(self):
+    def solve(self) -> Paths | None:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
@@ -77,11 +82,14 @@ class CBSSolver:
 
             # 2つの子ノードを生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
-                new_constraints = node.constraints | {
+                new_constraints = frozenset(node.constraints | {
                     Constraint(drone_id,
                                conflict.zone_name,
                                conflict.time_step)
-                }
+                })
+                """
+                | は **集合(set)や型の「和(union」**を表している記号
+                """
                 new_path = a_star(
                     self.graph,
                     start_zone,
@@ -94,8 +102,9 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+        return None
 
-    def solve2(self) -> dict[int, list]:
+    def solve2(self) -> Paths:
         paths: dict[int, list] = {}
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
@@ -115,7 +124,7 @@ class CBSSolver:
                     constraints.add(Constraint(drone_id, zone_name, t))
             path = a_star(
                 self.graph, start_zone, goal_zone,
-                set(constraints), drone_id, h_scores
+                frozenset(constraints), drone_id, h_scores
             )
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
@@ -154,7 +163,7 @@ class CBSSolver:
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         return None
 
-    def constraint_generator(self, conflict) -> set[Constraint]:
+    def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
 
         constraint_b = Constraint(
             conflict.dron_id_b, conflict.zone_name, conflict.time_step
@@ -166,7 +175,7 @@ def a_star(
     graph: Graph,
     start: Zone,
     goal: Zone,
-    constraints: set[Constraint],
+    constraints: frozenset[Constraint],
     drone_id: int,
     h_scores: dict[str, int],
 ) -> list[str]:

@@ -1,5 +1,5 @@
 import glob
-import inquirer  # type: ignore[import-untyped]
+import inquirer
 from collections.abc import Callable
 from typing import Any
 from functools import wraps
@@ -65,11 +65,12 @@ class FormatError(ParserError):
 @dataclass
 class HubAttributeError(ParserError):
     line_num: int
+    details: str
 
     def __str__(self) -> str:
         return (
-            f"Line {self.line_num}: Expected atributes ex) "
-            "[zone=restricted color=maroon max_drones=2] Max three attributes"
+            f"Line {self.line_num}: {self.details} Expected atributes"
+            "ex) [zone=restricted color=maroon max_drones=2]"
         )
 
 
@@ -104,7 +105,7 @@ class UnknownKeyError(ParserError):
     line_num: int
     keyword: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Line {self.line_num}: Unknown keyword '{self.keyword}"
 
 
@@ -114,7 +115,7 @@ class ValueRangeError(ParserError):
     field: str
     detail: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Line {self.line_num}: [{self.field}] {self.detail}"
 
 
@@ -124,7 +125,7 @@ class DupplicatedConnectionError(ParserError):
     fig: list
     detail: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Line {self.line_num}: [{self.fig}] {self.detail} "
 
 
@@ -134,7 +135,7 @@ class ZoneNameError(ParserError):
     fig: str
     detail: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Line {self.line_num}: [{self.fig}] {self.detail} "
 
 
@@ -220,7 +221,10 @@ def parser(file_path: str) -> Graph:
     )
 
 
-def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
+def handle_zone(
+        state: ParseState,
+        fetched: ParseUpdate,
+        line_num: int) -> None:
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
         raise ZoneNameError(
@@ -230,7 +234,10 @@ def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int):
     state.zones.append(fetched.data)
 
 
-def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int):
+def handle_connection(
+        state: ParseState,
+        fetched: ParseUpdate,
+        line_num: int) -> None:
     pair = frozenset(
         {
             fetched.data[ConfigKeyWords.ORIGIN],
@@ -268,7 +275,15 @@ def _get_nb_drones(line: str, line_num: int) -> ParseUpdate:
             line_num=line_num,
             detail="the for mat is expected:: 'nb_drones: <positive number>'",
         )
-    nb_drones = int(words[1])
+    try:
+        nb_drones = int(words[1])
+    except ValueError:
+        raise ValueRangeError(
+            line_num,
+            "nb_drones",
+            "must be a positive integer"
+        )
+
     if nb_drones <= 0:
         raise ValueRangeError(
             line_num=line_num, field="nb_drones", detail="must be positive"
@@ -295,8 +310,15 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     role = hubs[0].strip(":")
     role, _, _ = role.partition("_")
     name = hubs[1].strip()
-    x = int(hubs[2])
-    y = int(hubs[3])
+    try:
+        x = int(hubs[2])
+        y = int(hubs[3])
+    except ValueError:
+        raise ValueRangeError(
+            line_num,
+            "nb_drones",
+            "should be a positive integer"
+        )
     attribute_dict = _get_attribute(attrb, line_num)
     return ParseUpdate(
         target=ConfigKeyWords.ZONE,
@@ -320,7 +342,7 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
     atrbts = atrbt.split()
     if len(atrbts) > 3:
         print("debudg")
-        raise HubAttributeError(line_num)
+        raise HubAttributeError(line_num, "")
     for word in atrbts:
         if word.startswith("zone"):
             a_zone += 1
@@ -329,7 +351,7 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeError(line_num)
+            raise HubAttributeError(line_num, "")
         update = export_data(word, line_num)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -382,10 +404,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
 
 @register_exporter(ConfigKeyWords.CONNECTION)
 def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
-    try:
-        title, _, info = line.partition(": ")
-    except ParserError:
-        raise ConnectionFormatError(line_num=line_num, detail="")
+    title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
         infos = info.split("-")
         if len(infos) != 2:
@@ -414,21 +433,7 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
     )
 
 
-@register_exporter("max_link_capacity")
 def _get_connection_attribute(line: str, line_num: int) -> dict[str, str]:
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
     return {title: max_num}
-
-
-# if __name__ == "__main__":
-#     try:
-#         file = select_file()
-#         graph = parser(file)
-#         print(graph)
-#         # DrawConnection.draw(graph)
-#         PlotlyVisualizer.draw(graph)
-
-#     except ParserError as e:
-#         print(e)
-#         exit(1)

@@ -2,7 +2,7 @@ from find_path import CBSSolver
 from parser import parser, select_file, ParserError
 
 
-def main():
+def main() -> None:
     print("Hello from flyin!")
     file = select_file()
     graph = parser(file)
