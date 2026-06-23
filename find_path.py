@@ -61,14 +61,14 @@ class CBSSolver:
         }
         root = CTNode(frozenset(), root_paths)
         open_list = [root]
-        visited_nodes: set[frozenset] = set()
+        visited_nodes: set[frozenset[Constraint]] = set()
         iteration = 0
         while open_list:
             node = heapq.heappop(open_list)  # 最小コストを展開
             if node.constraints in visited_nodes:
                 continue
             visited_nodes.add(node.constraints)
-            print(f"CBS iter={iteration}, open_list size={len(open_list)}")
+            # print(f"CBS iter={iteration}, open_list size={len(open_list)}")
             iteration += 1
             if iteration > 10000:
                 raise RuntimeError("CBS timeout")
@@ -76,7 +76,7 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table)
             if conflict is None:
                 print(f"SOLVED at iter={iteration}!")
-                print(node.paths)
+                # print(node.paths)
                 PlotlyVisualizer.draw(self.graph, node.paths)
                 return node.paths  # 衝突なし → 解
 
@@ -105,7 +105,7 @@ class CBSSolver:
         return None
 
     def solve2(self) -> Paths:
-        paths: dict[int, list] = {}
+        paths: dict[int, list[str]] = {}
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
@@ -133,9 +133,12 @@ class CBSSolver:
         PlotlyVisualizer.draw(self.graph, paths)
         return paths
 
-    def _set_occupance_table(self, paths: dict) -> dict:
+    def _set_occupance_table(
+            self,
+            paths: dict[int, list[str]]
+    ) -> dict[tuple[str, int], list[int]]:
         """
-        occupance_table = dict [tuple[zone_name, time_step], list[drone_id]]
+        各 (ゾーン, 時刻) に居るドローンを記録する。衝突検出に使う。
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
@@ -149,7 +152,10 @@ class CBSSolver:
                     occupance_table[new_set] = [drone_id]
         return occupance_table
 
-    def conflict_detector(self, occupance_table: dict) -> Conflict | None:
+    def conflict_detector(
+            self,
+            occupance_table: dict[tuple[str, int], list[int]]
+    ) -> Conflict | None:
         for (zone_name, time_step), dron_ids in occupance_table.items():
             if time_step == 0:
                 continue
@@ -242,6 +248,7 @@ def a_star(
     current_state = (goal.name, time_step)
     while current_state in came_from:
         current_state_name, _ = current_state
+
         zone = graph.zones[current_state_name]
         if zone.zone_type == ZoneType.RESTRICTED:
             extra = f"extra_{current_state[0]}"
@@ -298,8 +305,8 @@ class PriorityQueue:
 if __name__ == "__main__":
     file = select_file()
     graph = parser(file)
-    print(graph)
-    print(f"Number of Drone: {graph.nb_drone}")
+    # print(graph)
+    # print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
         solver.solve()

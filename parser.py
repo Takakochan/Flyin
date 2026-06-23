@@ -35,7 +35,7 @@ SEPARATORS = (":", "[", "=")
 class ParseState:
     zones: list[dict[str, Any]]
     zone_names: set[str]
-    connections: dict[tuple, dict]
+    connections: dict[tuple[str, str], dict[str, Any]]
     connection_seen: set[frozenset[str]]
     nb_drones: int
 
@@ -122,7 +122,7 @@ class ValueRangeError(ParserError):
 @dataclass
 class DupplicatedConnectionError(ParserError):
     line_num: int
-    fig: list
+    fig: list[frozenset[Any]]
     detail: str
 
     def __str__(self) -> str:
@@ -139,7 +139,7 @@ class ZoneNameError(ParserError):
         return f"Line {self.line_num}: [{self.fig}] {self.detail} "
 
 
-def register_exporter(key_word: str) -> Callable:
+def register_exporter(key_word: str) -> Callable[[ExportFn], ExportFn]:
     def decorator(func: ExportFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -151,7 +151,7 @@ def register_exporter(key_word: str) -> Callable:
     return decorator
 
 
-def setter_machine(name: ConfigKeyWords) -> Callable:
+def setter_machine(name: ConfigKeyWords) -> Callable[[SetterFn], ExportFn]:
     def decorator(func: SetterFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -333,15 +333,14 @@ def _get_zone_info(line: str, line_num: int) -> ParseUpdate:
     )
 
 
-def _get_attribute(atrbt: str, line_num: int) -> dict:
-    attribute_dict = {}
+def _get_attribute(atrbt: str, line_num: int) -> dict[str, Any]:
+    attribute_dict: dict[str, Any] = {}
     a_zone = 0
     a_color = 0
     a_drone = 0
     atrbt = atrbt.strip("]")
     atrbts = atrbt.split()
     if len(atrbts) > 3:
-        print("debudg")
         raise HubAttributeError(line_num, "")
     for word in atrbts:
         if word.startswith("zone"):

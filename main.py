@@ -3,10 +3,9 @@ from parser import parser, select_file, ParserError
 
 
 def main() -> None:
-    print("Hello from flyin!")
     file = select_file()
     graph = parser(file)
-    print(graph)
+    # print(graph)
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
