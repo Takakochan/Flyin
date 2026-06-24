@@ -73,7 +73,6 @@ class HubAttributeError(ParserError):
         )
 
 
-
 @dataclass
 class HubFormatError(ParserError):
     line_num: int
@@ -332,7 +331,6 @@ def _get_attribute(atrbt: str, line_num: int) -> dict:
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
             raise HubAttributeError(line_num, "")
-
         update = export_data(word, line_num)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -385,10 +383,7 @@ def _get_max_drone_nb(line: str, line_num: int) -> ParseUpdate:
 
 @register_exporter(ConfigKeyWords.CONNECTION)
 def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
-    try:
-        title, _, info = line.partition(": ")
-    except ParserError:
-        raise ConnectionFormatError(line_num=line_num, detail="")
+    title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
         infos = info.split("-")
         if len(infos) != 2:
