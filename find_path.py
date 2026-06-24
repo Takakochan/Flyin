@@ -236,8 +236,9 @@ def a_star(
         current_state_name, _ = current_state
         zone = graph.zones[current_state_name]
         if zone.zone_type == ZoneType.RESTRICTED:
-            extra = f"extra_{current_state[0]}"
-            path.append(current_state[0])
+            pre = path[-1]
+            extra = f"{pre}-{current_state[0]}"
+            # path.append(current_state[0])
             path.append(extra)
             current_state = came_from[current_state]
 
