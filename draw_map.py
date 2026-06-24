@@ -6,7 +6,7 @@ from zone import ZoneType
 
 class PlotlyVisualizer:
     @staticmethod
-    def draw(graph: Graph, paths: dict) -> None:
+    def draw(graph: Graph, paths: dict[int, list[str]]) -> None:
         fig = go.Figure()
         edge_x = []
         edge_y = []
@@ -124,22 +124,31 @@ class PlotlyVisualizer:
             x, y, hover, labels, zone_names = [], [], [], [], []
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
-                if zone_name.startswith("extra_"):
-                    zone_name = zone_name[len("extra_"):]
+                if "-" in zone_name:
+                    zone_name = zone_name[zone_name.find("-") + 1:]
                 zone = graph.zones[zone_name]
                 if zone.zone_type == ZoneType.RESTRICTED:
                     prev_name = path[t - 1] if t > 0 else zone_name
-                    if prev_name.startswith("extra_"):
-                        prev_name = prev_name[len("extra_"):]
+                    if "-" in prev_name:
+                        prev_name = prev_name[prev_name.find("-") + 1:]
                     previous_zone = graph.zones[prev_name]
                     x.append((zone.position.x + previous_zone.position.x) / 2)
                     y.append((zone.position.y + previous_zone.position.y) / 2)
+                    # zone_name = f"{previous_zone.name}-{zone.name}"
                 else:
                     x.append(zone.position.x)
                     y.append(zone.position.y)
                 hover.append(f"Drone {drone_id}<br>Zone: {zone_name}<br>t={t}")
                 labels.append(f"D{drone_id}")
                 zone_names.append(zone_name)
+            line = " ".join(
+                f"{label}-{name}" for label, name in zip(labels, zone_names)
+            )
+            file_name = "Dron_paths.txt"
+            write_line = f"{line}\n"
+            if t >= 1:
+                with open(file_name, "a", encoding="utf-8") as file:
+                    file.write(write_line)
             return go.Scatter(
                 x=x,
                 y=y,

@@ -1,7 +1,28 @@
-from zone import Zone, ZoneType
+from zone import Zone, ZoneType, ZoneRole
 from connection import Connection
 from pydantic import BaseModel, model_validator
+from dataclasses import dataclass
 from collections import defaultdict
+
+
+class GraphValidationError(Exception):
+    pass
+
+
+@dataclass
+class StartMissingError(GraphValidationError):
+    detail: str
+
+    def __str__(self) -> str:
+        return f"{self.detail}"
+
+
+@dataclass
+class EndMissingError(GraphValidationError):
+    detail: str
+
+    def __str__(self) -> str:
+        return f"{self.detail}"
 
 
 class Graph(BaseModel):
@@ -14,6 +35,11 @@ class Graph(BaseModel):
     adjacency: dict[str, list[str]] = {}
 
     @model_validator(mode="after")
+    def validator(self) -> "Graph":
+        self.make_adjencency()
+        self._validate_start_end()
+        return self
+
     def make_adjencency(self) -> "Graph":
         self.adjacency = defaultdict(list)
         for conn in self.connections.values():
@@ -26,3 +52,13 @@ class Graph(BaseModel):
                 )
                 conne.extra_step = True
         return self
+
+    def _validate_start_end(self) -> None:
+        if not any(
+            zone.zone_role == ZoneRole.START for zone in self.zones.values()
+        ):
+            raise StartMissingError("Zone role 'start_hub' is missing")
+        if not any(
+            zone.zone_role == ZoneRole.END for zone in self.zones.values()
+        ):
+            raise EndMissingError("Zone role 'end_hub' is missing")

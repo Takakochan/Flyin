@@ -49,7 +49,7 @@ lint:
 
 lint-strict:
 	uvx flake8 $(FLAKE8_FLAGS) .
-	uvx mypy $(MYPY_FLAGS) --strict .
+	uvx --with pydantic mypy $(MYPY_FLAGS) --strict .
 	uvx ruff format --check $(RUFF_FORMAT_CHECK_FLAGS)
 	uvx ruff check $(RUFF_CHECK_FLAGS)
 	uvx ty check $(TY_CHECK_FLAGS)
