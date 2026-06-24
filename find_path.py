@@ -68,7 +68,6 @@ class CBSSolver:
             if node.constraints in visited_nodes:
                 continue
             visited_nodes.add(node.constraints)
-            # print(f"CBS iter={iteration}, open_list size={len(open_list)}")
             iteration += 1
             if iteration > 10000:
                 raise RuntimeError("CBS timeout")
@@ -76,10 +75,8 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table)
             if conflict is None:
                 print(f"SOLVED at iter={iteration}!")
-                # print(node.paths)
                 PlotlyVisualizer.draw(self.graph, node.paths)
                 return node.paths  # 衝突なし → 解
-
             # 2つの子ノードを生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
                 new_constraints = frozenset(node.constraints | {
@@ -129,7 +126,7 @@ class CBSSolver:
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
-        print(paths)
+        # print(paths)
         PlotlyVisualizer.draw(self.graph, paths)
         return paths
 
@@ -143,7 +140,7 @@ class CBSSolver:
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for time_step, p in enumerate(path):
-                if p.startswith("extra_"):
+                if "-" in p:
                     continue
                 new_set = (p, time_step)
                 if new_set in occupance_table:
@@ -251,7 +248,10 @@ def a_star(
 
         zone = graph.zones[current_state_name]
         if zone.zone_type == ZoneType.RESTRICTED:
-            extra = f"extra_{current_state[0]}"
+            pre = path[-1]
+            if "-" in pre:
+                pre = pre[: pre.rfind("-")]
+            extra = f"{pre}-{current_state[0]}"
             path.append(current_state[0])
             path.append(extra)
             current_state = came_from[current_state]
@@ -305,8 +305,6 @@ class PriorityQueue:
 if __name__ == "__main__":
     file = select_file()
     graph = parser(file)
-    # print(graph)
-    # print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
         solver.solve()

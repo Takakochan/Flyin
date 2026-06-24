@@ -3,6 +3,7 @@ from parser import parser, select_file, ParserError
 
 
 def main() -> None:
+    format_txt_file()
     file = select_file()
     graph = parser(file)
     # print(graph)
@@ -12,6 +13,12 @@ def main() -> None:
         solver.solve()
     except RuntimeError:
         solver.solve2()
+
+
+def format_txt_file() -> None:
+    file_name = "Dron_paths.txt"
+    with open(file_name, "w", encoding="utf-8") as _:
+        pass
 
 
 if __name__ == "__main__":

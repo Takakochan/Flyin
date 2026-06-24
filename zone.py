@@ -24,7 +24,7 @@ class ZoneTypeNotExistError(ValueError):
     value: str
 
     def __str__(self) -> str:
-        return f"Line {self.line_num} invalid zone_type {self. value}"
+        return f"Line {self.line_num} invalid zone_type {self.value}"
 
 
 class ZoneType(StrEnum):
