@@ -24,12 +24,13 @@ class ZoneTypeNotExistError(ValueError):
     value: str
 
     def __str__(self) -> str:
-        return f"Line {self.line_num} invalid zone_type {self.value}"
+        return (f"Line {self.line_num} invalid zone_type {self.value} "
+                f"valid Type are ['restricted', 'priority']")
 
 
 class ZoneType(StrEnum):
-    NORMAL = auto()
-    BLOCKED = auto()
+    _NORMAL = auto()
+    _BLOCKED = auto()
     RESTRICTED = auto()
     PRIORITY = auto()
 
@@ -44,7 +45,7 @@ class Zone(BaseModel):
     zone_role: ZoneRole = ZoneRole.HUB
     name: str
     position: Position
-    zone_type: ZoneType = ZoneType.NORMAL
+    zone_type: ZoneType = ZoneType._NORMAL
     color: str | None = None
     max_drones: int = Field(default=1, ge=1)
 

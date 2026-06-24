@@ -95,8 +95,8 @@ class ConnectionFormatError(ParserError):
     def __str__(self) -> str:
         return (
             f"Line {self.line_num}: {self.detail} "
-            "Expected 'connection: <name of hub>-<name of hub> "
-            "[Optionl-<max_link_capacity=positive int>]'"
+            #"Expected 'connection: <name of hub>-<name of hub> "
+            #"[Optionl-<max_link_capacity=positive int>]'"
         )
 
 
@@ -120,9 +120,9 @@ class ValueRangeError(ParserError):
 
 
 @dataclass
-class DupplicatedConnectionError(ParserError):
+class DuplicatedConnectionError(ParserError):
     line_num: int
-    fig: list[frozenset[Any]]
+    fig: str
     detail: str
 
     def __str__(self) -> str:
@@ -229,7 +229,7 @@ def handle_zone(
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
         raise ZoneNameError(
-            line_num, name, "is dipplicated"
+            line_num, name, "is duplicated"
         )
     state.zone_names.add(name)
     state.zones.append(fetched.data)
@@ -247,8 +247,9 @@ def handle_connection(
         }
     )
     if pair in state.connection_seen:
-        raise DupplicatedConnectionError(
-            line_num, list(pair), "already exist"
+        connection_name = f"{list(pair)[0]}-{list(pair)[1]}"
+        raise DuplicatedConnectionError(
+            line_num, connection_name, "Duplicated connection name"
         )
     state.connection_seen.add(pair)
     state.connections[
@@ -414,7 +415,7 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
         )
     info, _, attrbt = info.partition(" [")  # with attributes
     infos = info.split("-")
-    if len(infos) != 2:
+    if not any(con_name in ParseState.zone_names for con_name in infos): # <TODO How can I fetch the data ParseState.zone_names ??>
         raise ConnectionFormatError(
             line_num, "wrong format in attributes"
         )
@@ -432,4 +433,11 @@ def _get_connection_info(line: str, line_num: int) -> ParseUpdate:
 def _get_connection_attribute(line: str, line_num: int) -> dict[str, str]:
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
+    if title != "max_link_capacity":
+        raise ConnectionFormatError(
+            line_num, "Attribute spelling error, "
+            "it should be 'max_link_capacity=<int>'")
+    if int(max_num) < 1:
+        raise ConnectionFormatError(line_num, "max_link_capacity "
+                                    "should be greater than or equal to 1")
     return {title: max_num}

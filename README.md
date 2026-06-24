@@ -143,6 +143,42 @@ priority_bonus encourages the use of priority zones.
 Before running A\*, a reverse Breadth-First Search computes the minimum number of steps from every zone to the goal.
 
 
+## Visual Representation
+
+The project includes an interactive visualization built with Plotly to display the simulation results.
+
+### Features
+
+The visualization represents:
+
+* zones as colored nodes;
+* connections between zones as edges by hovering;
+* different zone types (normal, priority, restricted, blocked);
+* drone paths over time;
+* collisions and occupancy constraints;
+* waiting actions and delayed movements.
+
+### Color
+
+Based on plotly CSS color
+
+
+### User Experience Benefits
+
+The graphical representation improves the understanding of the algorithm by:
+
+* providing an intuitive view of the map topology;
+* making drone trajectories easy to follow;
+* helping detect congestion and conflicts visually;
+* allowing debugging of path planning decisions;
+* illustrating the effects of zone capacities and additional movement costs;
+* making the behavior of Conflict-Based Search easier to understand.
+
+Compared with textual output alone, the interactive map offers a faster and more intuitive way to analyze simulation results.
+
+The visualization is particularly useful for demonstrating how conflicts are resolved and how drones dynamically adapt their routes to reach the destination safely.
+
+
 ### requirment
 inquirer
 pydantic
