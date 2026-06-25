@@ -25,6 +25,16 @@ class Conflict:
     time_step: int
 
 
+class PathError(Exception):
+    pass
+
+
+@dataclass
+class PathNotFoundError(PathError):
+    def __str__(self) -> str:
+        return "Path was not found"
+
+
 @dataclass
 class CTNode:
     constraints: frozenset[Constraint]
@@ -74,7 +84,7 @@ class CBSSolver:
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table)
             if conflict is None:
-                print(f"SOLVED at iter={iteration}!")
+                print(f"finished at iter={iteration}")
                 PlotlyVisualizer.draw(self.graph, node.paths)
                 return node.paths  # 衝突なし → 解
             # 2つの子ノードを生成
@@ -99,6 +109,7 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+
         return None
 
     def solve2(self) -> Paths:
@@ -126,7 +137,6 @@ class CBSSolver:
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
-        # print(paths)
         PlotlyVisualizer.draw(self.graph, paths)
         return paths
 
@@ -136,6 +146,7 @@ class CBSSolver:
     ) -> dict[tuple[str, int], list[int]]:
         """
         各 (ゾーン, 時刻) に居るドローンを記録する。衝突検出に使う。
+        dict[(path, time_step),list[drone_id]
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
@@ -198,6 +209,8 @@ def a_star(
     open_queue.push(h_scores.get(start.name, len(graph.zones)),
                     start, time_step)
     while not open_queue.is_empty():
+        if time_step >= len(graph.zones) * 2:
+            raise PathNotFoundError()
         current, time_step = open_queue.pop()
         if current == goal:
             break

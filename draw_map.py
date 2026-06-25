@@ -122,6 +122,10 @@ class PlotlyVisualizer:
 
         def _drone_scatter(t: int) -> go.Scatter:
             x, y, hover, labels, zone_names = [], [], [], [], []
+
+            connection, cap_usage = [], []
+
+
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
                 if "-" in zone_name:

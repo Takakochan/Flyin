@@ -48,7 +48,7 @@ class Zone(BaseModel):
     position: Position
     zone_type: ZoneType = ZoneType._NORMAL
     color: str | None = None
-    max_drones: int = Field(default=1, ge=1)
+    max_drones: int = Field(default=1, ge=0)
 
 
 class ZoneState(Enum):

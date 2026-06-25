@@ -1,6 +1,7 @@
 from find_path import CBSSolver
 from parser import parser, select_file, ParserError
 from graph import GraphValidationError
+from find_path import PathNotFoundError
 
 
 def main() -> None:
@@ -25,5 +26,11 @@ def format_txt_file() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (ParserError, GraphValidationError, ValueError) as e:
+        print("Program succesfully finished!!")
+    except (
+        ParserError,
+        GraphValidationError,
+        ValueError,
+        PathNotFoundError
+    ) as e:
         print(f" ParserError: {e}")
