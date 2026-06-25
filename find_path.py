@@ -109,6 +109,7 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+
         return None
 
     def solve2(self) -> Paths:
@@ -145,6 +146,7 @@ class CBSSolver:
     ) -> dict[tuple[str, int], list[int]]:
         """
         各 (ゾーン, 時刻) に居るドローンを記録する。衝突検出に使う。
+        dict[(path, time_step),list[drone_id]
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
