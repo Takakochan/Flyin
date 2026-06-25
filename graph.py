@@ -38,6 +38,7 @@ class Graph(BaseModel):
     def validator(self) -> "Graph":
         self.make_adjencency()
         self._validate_start_end()
+        self._zero_drone_case()
         return self
 
     def make_adjencency(self) -> "Graph":
@@ -47,10 +48,12 @@ class Graph(BaseModel):
         for _, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
                 conne = next(
-                    c for (_, to), c in self.connections.items()
-                    if to == zone.name
+                    (c for (_, to), c in self.connections.items()
+                     if to == zone.name),
+                    None
                 )
-                conne.extra_step = True
+                if conne is not None:
+                    conne.extra_step = True
         return self
 
     def _validate_start_end(self) -> None:
@@ -62,3 +65,8 @@ class Graph(BaseModel):
             zone.zone_role == ZoneRole.END for zone in self.zones.values()
         ):
             raise EndMissingError("Zone role 'end_hub' is missing")
+
+    def _zero_drone_case(self) -> None:
+        for zone in self.zones.values():
+            if zone.max_drones == 0:
+                zone.zone_type = ZoneType._BLOCKED
