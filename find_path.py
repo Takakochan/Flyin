@@ -38,11 +38,15 @@ class CTNode:
         return self.cost < other.cost
 
 
+type Path = list[str]
+type Paths = dict[int, Path]
+
+
 class CBSSolver:
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
 
-    def solve(self):
+    def solve(self) -> Paths | None:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
@@ -57,14 +61,13 @@ class CBSSolver:
         }
         root = CTNode(frozenset(), root_paths)
         open_list = [root]
-        visited_nodes: set[frozenset] = set()
+        visited_nodes: set[frozenset[Constraint]] = set()
         iteration = 0
         while open_list:
             node = heapq.heappop(open_list)  # 最小コストを展開
             if node.constraints in visited_nodes:
                 continue
             visited_nodes.add(node.constraints)
-            print(f"CBS iter={iteration}, open_list size={len(open_list)}")
             iteration += 1
             if iteration > 10000:
                 raise RuntimeError("CBS timeout")
@@ -72,17 +75,18 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table)
             if conflict is None:
                 print(f"SOLVED at iter={iteration}!")
-                print(node.paths)
                 PlotlyVisualizer.draw(self.graph, node.paths)
                 return node.paths  # 衝突なし → 解
-
             # 2つの子ノードを生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
-                new_constraints = node.constraints | {
+                new_constraints = frozenset(node.constraints | {
                     Constraint(drone_id,
                                conflict.zone_name,
                                conflict.time_step)
-                }
+                })
+                """
+                | は **集合(set)や型の「和(union」**を表している記号
+                """
                 new_path = a_star(
                     self.graph,
                     start_zone,
@@ -95,9 +99,10 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+        return None
 
-    def solve2(self) -> dict[int, list]:
-        paths: dict[int, list] = {}
+    def solve2(self) -> Paths:
+        paths: dict[int, list[str]] = {}
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
@@ -116,23 +121,26 @@ class CBSSolver:
                     constraints.add(Constraint(drone_id, zone_name, t))
             path = a_star(
                 self.graph, start_zone, goal_zone,
-                set(constraints), drone_id, h_scores
+                frozenset(constraints), drone_id, h_scores
             )
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
-        print(paths)
+        # print(paths)
         PlotlyVisualizer.draw(self.graph, paths)
         return paths
 
-    def _set_occupance_table(self, paths: dict) -> dict:
+    def _set_occupance_table(
+            self,
+            paths: dict[int, list[str]]
+    ) -> dict[tuple[str, int], list[int]]:
         """
-        occupance_table = dict [tuple[zone_name, time_step], list[drone_id]]
+        各 (ゾーン, 時刻) に居るドローンを記録する。衝突検出に使う。
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for time_step, p in enumerate(path):
-                if p.startswith("extra_"):
+                if "-" in p:
                     continue
                 new_set = (p, time_step)
                 if new_set in occupance_table:
@@ -141,7 +149,10 @@ class CBSSolver:
                     occupance_table[new_set] = [drone_id]
         return occupance_table
 
-    def conflict_detector(self, occupance_table: dict) -> Conflict | None:
+    def conflict_detector(
+            self,
+            occupance_table: dict[tuple[str, int], list[int]]
+    ) -> Conflict | None:
         for (zone_name, time_step), dron_ids in occupance_table.items():
             if time_step == 0:
                 continue
@@ -155,7 +166,7 @@ class CBSSolver:
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         return None
 
-    def constraint_generator(self, conflict) -> set[Constraint]:
+    def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
 
         constraint_b = Constraint(
             conflict.dron_id_b, conflict.zone_name, conflict.time_step
@@ -167,7 +178,7 @@ def a_star(
     graph: Graph,
     start: Zone,
     goal: Zone,
-    constraints: set[Constraint],
+    constraints: frozenset[Constraint],
     drone_id: int,
     h_scores: dict[str, int],
 ) -> list[str]:
@@ -195,7 +206,7 @@ def a_star(
         # Neighbours which are connected from current zone
         for next_zone_name in neighbours:
             next_zone = graph.zones[next_zone_name]
-            if next_zone.zone_type == ZoneType.BLOCKED:
+            if next_zone.zone_type == ZoneType._BLOCKED:
                 continue
             next_time_step = time_step + 1
             conn = graph.connections.get((current.name, next_zone_name))
@@ -234,11 +245,14 @@ def a_star(
     current_state = (goal.name, time_step)
     while current_state in came_from:
         current_state_name, _ = current_state
+
         zone = graph.zones[current_state_name]
         if zone.zone_type == ZoneType.RESTRICTED:
             pre = path[-1]
+            if "-" in pre:
+                pre = pre[: pre.rfind("-")]
             extra = f"{pre}-{current_state[0]}"
-            # path.append(current_state[0])
+            path.append(current_state[0])
             path.append(extra)
             current_state = came_from[current_state]
 
@@ -291,8 +305,6 @@ class PriorityQueue:
 if __name__ == "__main__":
     file = select_file()
     graph = parser(file)
-    print(graph)
-    print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
         solver.solve()
