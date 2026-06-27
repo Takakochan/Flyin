@@ -115,17 +115,15 @@ class PlotlyVisualizer:
 
         drone_trace_idx = len(fig.data)
         max_t = max(len(p) for p in paths.values())
+        zone.max_drones
 
         """
         Dysplay for drones
+        Zone {zone_name}: 0/2 drones
+        Connection {zone_name}-{prev_name}: 0/1 used
         """
-
         def _drone_scatter(t: int) -> go.Scatter:
             x, y, hover, labels, zone_names = [], [], [], [], []
-
-            connection, cap_usage = [], []
-
-
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
                 if "-" in zone_name:

@@ -55,10 +55,12 @@ class ParserError(Exception):
 
 @dataclass
 class FormatError(ParserError):
-    line_num: int
+    line_num: int | None
     detail: str
 
     def __str__(self) -> str:
+        if self.line_num is None:
+            return self.detail
         return f"Line {self.line_num}: {self.detail}"
 
 
@@ -75,13 +77,25 @@ class HubAttributeError(ParserError):
 
 
 @dataclass
-class HubFormatError(ParserError):
+class HubAttributeDuplicatesError(ParserError):
     line_num: int
     detail: str
 
     def __str__(self) -> str:
         return (
             f"Line {self.line_num}: {self.detail}. "
+            "Each attribue (zone, color, max_drones) should appear only once"
+        )
+
+
+@dataclass
+class HubFormatError(ParserError):
+    line_num: int
+    detail: str
+
+    def __str__(self) -> str:
+        return (
+            f"Line {self.line_num}: {self.detail}, "
             "Expected 'hub: hub-name <int> <int> [zone=<optional> "
             "color=<optional> max_drones=<positive int>]'"
         )
@@ -208,7 +222,8 @@ def parser(file_path: str) -> Graph:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
-
+    if state.nb_drones is None:
+        raise FormatError(None, "nb_drones is missing")
     for zone_data in state.zones:
         if zone_data.get("zone_role") in (ZoneRole.START, ZoneRole.END):
             zone_data["max_drones"] = state.nb_drones
@@ -334,6 +349,11 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_attribute(
         atrbt: str, line_num: int, state: ParseState
 ) -> dict[str, Any]:
+    if state is None:
+        state = ParseState(
+            zones=[], zone_names=set(),
+            connections={}, connection_seen=set(), nb_drones=0
+        )
     attribute_dict: dict[str, Any] = {}
     a_zone = 0
     a_color = 0
@@ -409,7 +429,7 @@ def _get_connection_info(
 ) -> ParseUpdate:
     title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
-        infos = info.split("-")
+        # infos = info.split("-")
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
@@ -456,7 +476,13 @@ def _get_connection_attribute(
         raise ConnectionFormatError(
             line_num, "Attribute spelling error, "
             "it should be 'max_link_capacity=<int>'")
-    if int(max_num) < 1:
+    try:
+        capacity = int(max_num)
+    except ValueError:
+        raise ConnectionFormatError(
+            line_num, "max_link_capacity must be an integer"
+        )
+    if capacity < 1:
         raise ConnectionFormatError(line_num, "max_link_capacity "
                                     "should be greater than or equal to 1")
     return {title: max_num}

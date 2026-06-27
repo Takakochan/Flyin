@@ -33,6 +33,9 @@ class Graph(BaseModel):
     """
     nb_drone: int = 0
     adjacency: dict[str, list[str]] = {}
+    """
+    adjacency = name of origin, list[neighbour]
+    """
 
     @model_validator(mode="after")
     def validator(self) -> "Graph":
@@ -43,8 +46,15 @@ class Graph(BaseModel):
 
     def make_adjencency(self) -> "Graph":
         self.adjacency = defaultdict(list)
+        """
+        defaultdict: It automatically assigns a default value to keys
+        that do not exist which means no need to manually check
+        for missing keys and avoid KeyError.
+        """
         for conn in self.connections.values():
             self.adjacency[conn.origin].append(conn.to)
+            self.adjacency[conn.to].append(conn.origin)
+            """stupid but for the pdf requirement"""
         for _, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
                 conne = next(

@@ -8,7 +8,6 @@ def main() -> None:
     format_txt_file()
     file = select_file()
     graph = parser(file)
-    # print(graph)
     print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:

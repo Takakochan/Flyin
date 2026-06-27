@@ -69,6 +69,9 @@ class CBSSolver:
                       goal_zone, frozenset(), d, h_scores)
             for d in range(self.graph.nb_drone)
         }
+        """
+        root_path = {drone_id: list[path]}
+        """
         root = CTNode(frozenset(), root_paths)
         open_list = [root]
         visited_nodes: set[frozenset[Constraint]] = set()
@@ -82,7 +85,7 @@ class CBSSolver:
             if iteration > 10000:
                 raise RuntimeError("CBS timeout")
             occupance_table = self._set_occupance_table(node.paths)
-            conflict = self.conflict_detector(occupance_table)
+            conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
                 print(f"finished at iter={iteration}")
                 PlotlyVisualizer.draw(self.graph, node.paths)
@@ -160,9 +163,30 @@ class CBSSolver:
                     occupance_table[new_set] = [drone_id]
         return occupance_table
 
+    def _set_con_ocpancy(
+            self,
+            paths: dict[int, list[str]]
+    ) -> dict[tuple[str, str, int], list[int]]:
+        """各 (origin, to, time) を通過するドローンを記録する。"""
+        conn_table: dict[tuple[str, str, int], list[int]] = {}
+        for drone_id, path in paths.items():
+            for t in range(1, len(path)):
+                prev, curr = path[t - 1], path[t]
+                if "-" in prev or "-" in curr or prev == curr:
+                    continue
+                key: tuple[str, str, int] | None = None
+                if (prev, curr) in self.graph.connections:
+                    key = (prev, curr, t)
+                elif (curr, prev) in self.graph.connections:
+                    key = (curr, prev, t)
+                if key is not None:
+                    conn_table.setdefault(key, []).append(drone_id)
+        return conn_table
+
     def conflict_detector(
             self,
-            occupance_table: dict[tuple[str, int], list[int]]
+            occupance_table: dict[tuple[str, int], list[int]],
+            paths: dict[int, list[str]],
     ) -> Conflict | None:
         for (zone_name, time_step), dron_ids in occupance_table.items():
             if time_step == 0:
@@ -175,6 +199,12 @@ class CBSSolver:
             max_drons = self.graph.zones[zone_name].max_drones
             if max_drons < len(dron_ids):
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
+        for (origin, to, t), dron_ids in self._set_con_ocpancy(paths).items():
+            conn = self.graph.connections.get(
+                (origin, to)
+            ) or self.graph.connections.get((to, origin))
+            if conn and len(dron_ids) > conn.max_link_capacity:
+                return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
