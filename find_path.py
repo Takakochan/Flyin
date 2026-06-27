@@ -167,7 +167,7 @@ class CBSSolver:
             self,
             paths: dict[int, list[str]]
     ) -> dict[tuple[str, str, int], list[int]]:
-        """各 (origin, to, time) を通過するドローンを記録する。"""
+        # 各 (origin, to, time) を通過するドローンを記録する
         conn_table: dict[tuple[str, str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for t in range(1, len(path)):
@@ -284,7 +284,7 @@ def a_star(
                 open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
-        # 2. 経路の復元 — ループを抜けた後、came_from を逆向きにたどって path を作る。
+        # 経路の復元 — ループを抜けた後、came_from を逆向きにたどって path を作る。
     current_state = (goal.name, time_step)
     while current_state in came_from:
         current_state_name, _ = current_state
