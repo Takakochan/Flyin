@@ -22,50 +22,33 @@ Create the virtual environment and install dependencies:
 ```bash
 make install
 ```
-
 ### Run
-
 ```bash
 make run
 ```
-
-+++++++++++++++++++++++++++++++++++++++
 ### Debug
-
 ```bash
 make debug
 ```
-
 ### Tests
 
 ```bash
 make test
 ```
-+++++++++++++++++++++++++++++++++++++
-
 ### Lint check
-
 ```bash
 make lint
 ```
-
 ### Strict lint checks
-
 ```bash
 make lint-strict
 ```
-
 ### Clean project files
-
 ```bash
 make clean
 ```
-
-
 # Example
-
 ### Input (`maps/easy/01_linear_path.txt`)
-
 ```
 nb_drones: 2
 
@@ -94,7 +77,6 @@ D1-goal
 
 Each line represents one simulation turn.
 Only drones that moved are listed.
-Drone IDs start at 1.
 
 # Algorithm
 
@@ -221,4 +203,4 @@ AI usage
 Considered edge cases
 Test idea
 English writing
-checking about my own perception 
+checking about my own perception

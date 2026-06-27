@@ -166,7 +166,7 @@ class CBSSolver:
             self,
             paths: dict[int, list[str]]
     ) -> dict[tuple[str, str, int], list[int]]:
-        """各 (origin, to, 時刻) を通過するドローンを記録する。"""
+        """各 (origin, to, time) を通過するドローンを記録する。"""
         conn_table: dict[tuple[str, str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for t in range(1, len(path)):
@@ -219,9 +219,9 @@ class CBSSolver:
                 if "-" in name:
                     name = name[name.find("-") + 1:]
                 zone_count[name] = zone_count.get(name, 0) + 1
-            for zone_name, count in sorted(zone_count.items()):
+            for zone_name, counting in sorted(zone_count.items()):
                 cap = self.graph.zones[zone_name].max_drones
-                print(f"  Zone {zone_name}: {count}/{cap} drones")
+                print(f"  Zone {zone_name}: {counting}/{cap} drones")
 
             # コネクションの使用状況: path[t-1]→path[t] の移動をカウント
             conn_count: dict[tuple[str, str], int] = {}
@@ -238,9 +238,9 @@ class CBSSolver:
                 else:
                     continue
                 conn_count[key] = conn_count.get(key, 0) + 1
-            for (origin, to), count in sorted(conn_count.items()):
+            for (origin, to), counting in sorted(conn_count.items()):
                 cap = self.graph.connections[(origin, to)].max_link_capacity
-                print(f"  Connection {origin}-{to}: {count}/{cap} capacity used")
+                print(f"  Connection {origin}-{to}: {counting}/{cap} capacity used")
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
 
@@ -319,7 +319,7 @@ def a_star(
                 open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
-        # 2. 経路の復元 — ループを抜けた後、came_from を逆向きにたどって path を作る。
+        # 経路の復元 — ループを抜けた後、came_from を逆向きにたどって path を作る。
     current_state = (goal.name, time_step)
     while current_state in came_from:
         current_state_name, _ = current_state
