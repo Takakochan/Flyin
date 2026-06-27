@@ -1,11 +1,3 @@
-• How efficient is your algorithm?
-• Can it work with a large number of drones?
-• What is the complexity (e.g., O(n), O(log n), etc.)?
-• Are you recalculating or caching paths?
-• How does it impact memory usage?
-• How does your visual representation enhance understanding of
-the simulation?
-
 _This project has been created as part of the 42 curriculum by tkunugi._
 
 # Description
@@ -69,6 +61,40 @@ make lint-strict
 make clean
 ```
 
+
+# Example
+
+### Input (`maps/easy/01_linear_path.txt`)
+
+```
+nb_drones: 2
+
+start_hub: start 0 0 [color=green]
+hub: waypoint1 1 0 [color=blue]
+hub: waypoint2 2 0 [color=blue]
+end_hub: goal 3 0 [color=red]
+
+connection: start-waypoint1
+connection: waypoint1-waypoint2
+connection: waypoint2-goal
+```
+
+Two drones start at `start` and must each reach `goal` through `waypoint1` and `waypoint2`.
+The link `start-waypoint1` has default capacity 1, so they cannot both enter `waypoint1` at the same time.
+CBS staggers their departure to avoid a conflict.
+
+### Output (`Dron_paths.txt`)
+
+```
+D2-waypoint1
+D1-waypoint1 D2-waypoint2
+D1-waypoint2 D2-goal
+D1-goal
+```
+
+Each line represents one simulation turn.
+Only drones that moved are listed.
+Drone IDs start at 1.
 
 # Algorithm
 
@@ -190,3 +216,9 @@ Plotly visualization
 ### Resources
 [Plotly Docs](https://plotly.com/python/?_gl=1*1vksk6q*_gcl_au*MjAxMDA3MTQzMS4xNzgwNDE1NzQ4*_ga*NzA4NzMxMDYxLjE3ODExODk0ODQ.*_ga_6G7EE0JNSC*czE3ODIzMTE2MzYkbzMkZzEkdDE3ODIzMTE4MTIkajYwJGwwJGgw)
 [Plotly example](https://data-analytics.fun/2021/06/12/plotly-line-scatter-details/)
+
+AI usage
+Considered edge cases
+Test idea
+English writing
+checking about my own perception 

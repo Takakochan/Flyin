@@ -45,6 +45,8 @@ class Graph(BaseModel):
         self.adjacency = defaultdict(list)
         for conn in self.connections.values():
             self.adjacency[conn.origin].append(conn.to)
+            self.adjacency[conn.to].append(conn.origin)
+            """stupid but for the pdf requirement"""
         for _, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
                 conne = next(

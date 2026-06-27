@@ -122,10 +122,6 @@ class PlotlyVisualizer:
 
         def _drone_scatter(t: int) -> go.Scatter:
             x, y, hover, labels, zone_names = [], [], [], [], []
-
-            connection, cap_usage = [], []
-
-
             for drone_id, path in sorted(paths.items()):
                 zone_name = path[t] if t < len(path) else path[-1]
                 if "-" in zone_name:
@@ -142,17 +138,23 @@ class PlotlyVisualizer:
                 else:
                     x.append(zone.position.x)
                     y.append(zone.position.y)
-                hover.append(f"Drone {drone_id}<br>Zone: {zone_name}<br>t={t}")
-                labels.append(f"D{drone_id}")
+                hover.append(f"Drone {drone_id + 1}<br>Zone: {zone_name}<br>t={t}")
+                labels.append(f"D{drone_id + 1}")
                 zone_names.append(zone_name)
-            line = " ".join(
-                f"{label}-{name}" for label, name in zip(labels, zone_names)
-            )
-            file_name = "Dron_paths.txt"
-            write_line = f"{line}\n"
             if t >= 1:
-                with open(file_name, "a", encoding="utf-8") as file:
-                    file.write(write_line)
+                output_parts = []
+                for drone_id, path in sorted(paths.items()):
+                    if t >= len(path):
+                        continue
+                    curr = path[t]
+                    prev = path[t - 1]
+                    if curr == prev:
+                        continue
+                    output_parts.append(f"D{drone_id + 1}-{curr}")
+                file_name = "Dron_paths.txt"
+                if output_parts:
+                    with open(file_name, "a", encoding="utf-8") as file:
+                        file.write(" ".join(output_parts) + "\n")
             return go.Scatter(
                 x=x,
                 y=y,

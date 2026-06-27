@@ -1,0 +1,11 @@
+# 双方向テスト: コネクションがすべて逆向きに定義されている
+# 一方向実装だと start から出られないので PathNotFoundError になる
+# 双方向実装だと逆方向を使って start→mid→goal に到達できる
+nb_drones: 1
+
+start_hub: start 0 0 [color=green]
+hub: mid 1 0 [color=blue]
+end_hub: goal 2 0 [color=red]
+
+connection: mid-start
+connection: goal-mid

@@ -37,7 +37,7 @@ class ParseState:
     zone_names: set[str]
     connections: dict[tuple[str, str], dict[str, Any]]
     connection_seen: set[frozenset[str]]
-    nb_drones: int
+    nb_drones: int | None
 
 
 @dataclass
@@ -55,10 +55,12 @@ class ParserError(Exception):
 
 @dataclass
 class FormatError(ParserError):
-    line_num: int
+    line_num: int | None
     detail: str
 
     def __str__(self) -> str:
+        if self.line_num is None:
+            return self.detail
         return f"Line {self.line_num}: {self.detail}"
 
 
@@ -71,6 +73,18 @@ class HubAttributeError(ParserError):
         return (
             f"Line {self.line_num}: {self.details} Expected atributes "
             "ex) [zone=restricted color=maroon max_drones=2]"
+        )
+
+
+@dataclass
+class HubAttributeDupplicatedError(ParserError):
+    line_num: int
+    detail: str
+
+    def __str__(self) -> str:
+        return (
+            f"Line {self.line_num}: {self.detail} "
+            "Each attribute (zone, color, max_drones) may appear only once."
         )
 
 
@@ -106,7 +120,7 @@ class UnknownKeyError(ParserError):
     keyword: str
 
     def __str__(self) -> str:
-        return f"Line {self.line_num}: Unknown keyword '{self.keyword}"
+        return f"Line {self.line_num}: Unknown keyword '{self.keyword}'"
 
 
 @dataclass
@@ -186,7 +200,7 @@ def parser(file_path: str) -> Graph:
         zone_names=set(),
         connections={},
         connection_seen=set(),
-        nb_drones=0,
+        nb_drones=None,
     )
     try:
         with open(file_path, "r") as f:
@@ -208,7 +222,8 @@ def parser(file_path: str) -> Graph:
         raise FileNotFoundError(f"File not found: {file_path}")
     except PermissionError:
         raise PermissionError(f"Permission denied: {file_path}")
-
+    if state.nb_drones is None:
+        raise FormatError(None, "nb_drones is missing")
     for zone_data in state.zones:
         if zone_data.get("zone_role") in (ZoneRole.START, ZoneRole.END):
             zone_data["max_drones"] = state.nb_drones
@@ -276,7 +291,7 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     if len(words) != 2:
         raise FormatError(
             line_num,
-            "the for mat is expected:: 'nb_drones: <positive number>'"
+            "the format is expected: 'nb_drones: <positive number>'"
         )
     try:
         nb_drones = int(words[1])
@@ -299,7 +314,7 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 @register_exporter("end_hub")
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
-    if "[" not in line and "]" not in line:
+    if "[" not in line or "]" not in line:
         raise HubFormatError(
             line_num, "Attribute is not given"
         )
@@ -315,7 +330,7 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
         y = int(hubs[3])
     except ValueError:
         raise ValueRangeError(
-            line_num, "nb_drones", "should be a positive integer"
+            line_num, "position", "x and y must be integers"
         )
     attribute_dict = _get_attribute(attrb, line_num, state)
     return ParseUpdate(
@@ -332,8 +347,13 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 
 
 def _get_attribute(
-        atrbt: str, line_num: int, state: ParseState
+        atrbt: str, line_num: int, state: ParseState | None = None
 ) -> dict[str, Any]:
+    if state is None:
+        state = ParseState(
+            zones=[], zone_names=set(),
+            connections={}, connection_seen=set(), nb_drones=0
+        )
     attribute_dict: dict[str, Any] = {}
     a_zone = 0
     a_color = 0
@@ -350,7 +370,7 @@ def _get_attribute(
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeError(line_num, "")
+            raise HubAttributeDupplicatedError(line_num, "Duplicate attribute.")
         update = export_data(word, line_num, state)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -409,7 +429,6 @@ def _get_connection_info(
 ) -> ParseUpdate:
     title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
-        infos = info.split("-")
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
@@ -456,7 +475,13 @@ def _get_connection_attribute(
         raise ConnectionFormatError(
             line_num, "Attribute spelling error, "
             "it should be 'max_link_capacity=<int>'")
-    if int(max_num) < 1:
+    try:
+        capacity = int(max_num)
+    except ValueError:
+        raise ConnectionFormatError(
+            line_num, "max_link_capacity must be an integer"
+        )
+    if capacity < 1:
         raise ConnectionFormatError(line_num, "max_link_capacity "
                                     "should be greater than or equal to 1")
     return {title: max_num}

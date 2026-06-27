@@ -109,7 +109,7 @@ connection: maze_trap_b1-maze_trap_b2
 connection: maze_trap_b2-maze_trap_b3
 connection: maze_trap_b3-maze_dead_b
 
-connection: maze_loop1-ma ze_loop2
+connection: maze_loop1-maze_loop2
 connection: maze_loop2-maze_loop3
 connection: maze_loop3-maze_loop4
 connection: maze_loop4-maze_loop5

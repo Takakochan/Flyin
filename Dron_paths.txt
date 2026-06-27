@@ -1,4 +1,8 @@
-D0-start D1-waypoint1
-D0-waypoint1 D1-waypoint2
-D0-waypoint2 D1-goal
-D0-goal D1-goal
+D4-junction D5-junction
+D3-junction D5-correct_path
+D1-junction D4-correct_path D5-intermediate
+D1-correct_path D2-junction D4-intermediate D5-goal
+D1-intermediate D2-correct_path D4-goal
+D1-goal D2-intermediate D3-correct_path
+D2-goal D3-intermediate
+D3-goal
