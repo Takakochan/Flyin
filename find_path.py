@@ -1,8 +1,9 @@
 import heapq
+import time
 from collections import deque
 from itertools import count
 from dataclasses import dataclass
-
+import pandas as pd
 
 from parser import parser, select_file
 from graph import Graph
@@ -45,7 +46,9 @@ class CTNode:
         return sum(len(p) for p in self.paths.values())
 
     def __lt__(self, other: "CTNode") -> bool:
-        return self.cost < other.cost
+        if self.cost != other.cost:
+            return self.cost < other.cost
+        return len(self.constraints) < len(other.constraints)
 
 
 type Path = list[str]
@@ -71,25 +74,19 @@ class CBSSolver:
         }
         root = CTNode(frozenset(), root_paths)
         open_list = [root]
-        visited_nodes: set[frozenset[Constraint]] = set()
-        iteration = 0
+        start_time = time.time()
         while open_list:
-            node = heapq.heappop(open_list)  # 最小コストを展開
-            if node.constraints in visited_nodes:
-                continue
-            visited_nodes.add(node.constraints)
-            iteration += 1
-            if iteration > 10000:
+            node = heapq.heappop(open_list)
+            if time.time() - start_time > 50:
                 raise RuntimeError("CBS timeout")
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
-                print(f"finished at iter={iteration}")
                 if capacity_info:
                     self._print_capacity_info(node.paths)
                 PlotlyVisualizer.draw(self.graph, node.paths)
-                return node.paths  # 衝突なし → 解
-            # 2つの子ノードを生成
+                return node.paths
+            # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
                 new_constraints = frozenset(node.constraints | {
                     Constraint(drone_id,
@@ -111,6 +108,7 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+                    break
 
         return None
 
@@ -187,6 +185,7 @@ class CBSSolver:
             occupance_table: dict[tuple[str, int], list[int]],
             paths: dict[int, list[str]],
     ) -> Conflict | None:
+        earliest: Conflict | None = None
         for (zone_name, time_step), dron_ids in occupance_table.items():
             if time_step == 0:
                 continue
@@ -195,24 +194,60 @@ class CBSSolver:
                 continue
             if zone.zone_role in ("start", "end"):
                 continue
-            max_drons = self.graph.zones[zone_name].max_drones
-            if max_drons < len(dron_ids):
-                return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
+            if self.graph.zones[zone_name].max_drones < len(dron_ids):
+                c = Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
+                if earliest is None or time_step < earliest.time_step:
+                    earliest = c
         for (origin, to, t), dron_ids in self._set_connection_occupancy(paths).items():
             conn = self.graph.connections.get(
                 (origin, to)
             ) or self.graph.connections.get((to, origin))
             if conn and len(dron_ids) > conn.max_link_capacity:
-                return Conflict(dron_ids[0], dron_ids[1], to, t)
-        return None
+                c = Conflict(dron_ids[0], dron_ids[1], to, t)
+                if earliest is None or t < earliest.time_step:
+                    earliest = c
+        return earliest
+
+    # def _print_capacity_info(self, paths: Paths) -> None:
+    #     # ターンごとにゾーンとコネクションの使用状況を表示する
+    #     max_t = max(len(p) for p in paths.values())
+    #     for t in range(1, max_t):
+    #         print(f"--- Turn {t} ---")
+
+    #         # ゾーンの使用状況: path[t] を全ドローンから集めてカウント
+    #         zone_count: dict[str, int] = {}
+    #         for path in paths.values():
+    #             name = path[t] if t < len(path) else path[-1]
+    #             if "-" in name:
+    #                 name = name[name.find("-") + 1:]
+    #             zone_count[name] = zone_count.get(name, 0) + 1
+    #         for zone_name, counting in sorted(zone_count.items()):
+    #             cap = self.graph.zones[zone_name].max_drones
+    #             print(f"  Zone {zone_name}: {counting}/{cap} drones")
+
+    #         # コネクションの使用状況: path[t-1]→path[t] の移動をカウント
+    #         conn_count: dict[tuple[str, str], int] = {}
+    #         for path in paths.values():
+    #             if t >= len(path):
+    #                 continue
+    #             prev, curr = path[t - 1], path[t]
+    #             if "-" in prev or "-" in curr or prev == curr:
+    #                 continue
+    #             if (prev, curr) in self.graph.connections:
+    #                 key = (prev, curr)
+    #             elif (curr, prev) in self.graph.connections:
+    #                 key = (curr, prev)
+    #             else:
+    #                 continue
+    #             conn_count[key] = conn_count.get(key, 0) + 1
+    #         for (origin, to), counting in sorted(conn_count.items()):
+    #             cap = self.graph.connections[(origin, to)].max_link_capacity
+    #             print(f"  Connection {origin}-{to}: {counting}/{cap} capacity used")
 
     def _print_capacity_info(self, paths: Paths) -> None:
-        # ターンごとにゾーンとコネクションの使用状況を表示する
         max_t = max(len(p) for p in paths.values())
         for t in range(1, max_t):
-            print(f"--- Turn {t} ---")
-
-            # ゾーンの使用状況: path[t] を全ドローンから集めてカウント
+            print(f"===Turn {t}===")
             zone_count: dict[str, int] = {}
             for path in paths.values():
                 name = path[t] if t < len(path) else path[-1]
@@ -221,29 +256,9 @@ class CBSSolver:
                 zone_count[name] = zone_count.get(name, 0) + 1
             for zone_name, counting in sorted(zone_count.items()):
                 cap = self.graph.zones[zone_name].max_drones
-                print(f"  Zone {zone_name}: {counting}/{cap} drones")
-
-            # コネクションの使用状況: path[t-1]→path[t] の移動をカウント
-            conn_count: dict[tuple[str, str], int] = {}
-            for path in paths.values():
-                if t >= len(path):
-                    continue
-                prev, curr = path[t - 1], path[t]
-                if "-" in prev or "-" in curr or prev == curr:
-                    continue
-                if (prev, curr) in self.graph.connections:
-                    key = (prev, curr)
-                elif (curr, prev) in self.graph.connections:
-                    key = (curr, prev)
-                else:
-                    continue
-                conn_count[key] = conn_count.get(key, 0) + 1
-            for (origin, to), counting in sorted(conn_count.items()):
-                cap = self.graph.connections[(origin, to)].max_link_capacity
-                print(f"  Connection {origin}-{to}: {counting}/{cap} capacity used")
+                print(f"   Zone {zone_name}: {counting}/{cap} drones")
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
-
         constraint_b = Constraint(
             conflict.dron_id_b, conflict.zone_name, conflict.time_step
         )
