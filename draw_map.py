@@ -2,11 +2,12 @@ import plotly.graph_objects as go
 
 from graph import Graph
 from zone import ZoneType
+from time_line import TimeLine
 
 
 class PlotlyVisualizer:
     @staticmethod
-    def draw(graph: Graph, paths: dict[int, list[str]]) -> None:
+    def draw(graph: Graph, tl: TimeLine) -> None:
         fig = go.Figure()
         edge_x = []
         edge_y = []
@@ -114,7 +115,7 @@ class PlotlyVisualizer:
                 )
 
         drone_trace_idx = len(fig.data)
-        max_t = max(len(p) for p in paths.values())
+        max_t = len(tl.turns)
 
         """
         Dysplay for drones
@@ -122,15 +123,22 @@ class PlotlyVisualizer:
 
         def _drone_scatter(t: int) -> go.Scatter:
             x, y, hover, labels, zone_names = [], [], [], [], []
-            for drone_id, path in sorted(paths.items()):
-                zone_name = path[t] if t < len(path) else path[-1]
-                if "-" in zone_name:
+            for event in sorted(tl.turns[t], key=lambda e: e.drone):
+                drone_id = event.drone
+                state = tl.get_state(t, drone_id)
+                zone_name = state.location
+                if state.status == "connection":
                     zone_name = zone_name[zone_name.find("-") + 1:]
                 zone = graph.zones[zone_name]
                 if zone.zone_type == ZoneType.RESTRICTED:
-                    prev_name = path[t - 1] if t > 0 else zone_name
-                    if "-" in prev_name:
-                        prev_name = prev_name[prev_name.find("-") + 1:]
+                    if t > 0:
+                        prev_state = tl.get_state(t - 1, drone_id)
+                        prev_name = prev_state.location
+                        if prev_state.status == "connection":
+                            prev_name = prev_name[prev_name.find("-") + 1:]
+                    else:
+                        prev_name = zone_name
+
                     previous_zone = graph.zones[prev_name]
                     x.append((zone.position.x + previous_zone.position.x) / 2)
                     y.append((zone.position.y + previous_zone.position.y) / 2)
@@ -141,15 +149,16 @@ class PlotlyVisualizer:
                 hover.append(f"Drone {drone_id + 1}<br>Zone: {zone_name}<br>t={t}")
                 labels.append(f"D{drone_id + 1}")
                 zone_names.append(zone_name)
+
             if t >= 1:
                 output_parts = []
-                for drone_id, path in sorted(paths.items()):
-                    if t >= len(path):
-                        continue
-                    curr = path[t]
-                    prev = path[t - 1]
+                for event in sorted(tl.turns[t], key=lambda e: e.drone):
+                    drone_id = event.drone
+                    curr = tl.get_state(t, drone_id).location
+                    prev = tl.get_state(t - 1, drone_id).location
                     if curr == prev:
                         continue
+
                     output_parts.append(f"D{drone_id + 1}-{curr}")
                 file_name = "Dron_paths.txt"
                 if output_parts:

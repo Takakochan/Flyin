@@ -1,0 +1,83 @@
+❯ 根本的なことなんだけど、こういう感じのクラスを作ったらどうかな？1. ドローン状態
+  @dataclass
+  class DroneState:
+      id: int
+      location: str  # zone or connection
+      status: Literal["zone", "connection", "goal"]
+  2. Moveイベント
+  @dataclass
+  class MoveEvent:
+      drone_id: int
+      to: str  # zone or connection
+  3. Timeline（コア）
+  class Timeline:
+      def __init__(self):
+          self.turns: list[list[MoveEvent]] = []
+  4. 追加メソッド（重要）
+  ターン追加
+  def add_turn(self, events: list[MoveEvent]) -> None:
+      self.turns.append(events)
+Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+いいアイデアだけど、適用範囲を絞った方がいい。
+
+問題点： A* と CBS はパスを「タイムステップのインデックスつき列」として扱う。Timeline に変えると、衝突検出・制約チェック・コスト計算もすべて書き直しになる。これは tuple リファクタリングと同じ規模の変更。
+
+おすすめの使い方： Timeline は 出力レイヤー専用 にする。
+
+A* → list[str]  ←  CBS が使う（変えない）
+                ↓  変換関数 1本
+            Timeline  ← draw_map と _print_capacity_info が使う
+
+変換関数はシンプル：
+
+def to_timeline(paths: Paths) -> Timeline:
+    max_t = max(len(p) for p in paths.values())
+    tl = Timeline()
+    for t in range(max_t):
+        events = []
+        for drone_id, path in paths.items():
+            zone = path[t] if t < len(path) else path[-1]
+            events.append(MoveEvent(drone_id, zone))
+        tl.add_turn(events)
+    return tl
+
+こうすると：
+- A* / CBS の中身は一切触らない
+- draw_map の - 記法バグはここで吸収できる
+- mypy エラーも限定的
+
+やる価値があるのは draw_map.py と _print_capacity_info がだいぶ綺麗になること。やる？
+
+✻ Cooked for 31s
+
+❯ やる。コードは自分で書きたいから誘導して。
+
+順番はこう：
+
+1. timeline.py を新規作成してクラス3つを定義
+2. find_path.py に to_timeline() 変換関数を追加
+3. draw_map.py の draw() を Timeline を受け取るように変更
+4. _print_capacity_info を Timeline ベースに変更
+
+---
+Step 1：timeline.py
+
+まず DroneState、MoveEvent、Timeline を書く。Timeline には add_turn() の他に get_state(t, drone_id) -> DroneState も追加しておくと後で draw_map で便利。
+
+status の値で - 記法を置き換えるのがポイント：
+
+┌──────────────────┬───────────────────┐
+│  現在の path[t]  │ DroneState.status │
+├──────────────────┼───────────────────┤
+│ 普通のゾーン名   │ "zone"            │
+├──────────────────┼───────────────────┤
+│ "a-restricted_b" │ "connection"      │
+├──────────────────┼───────────────────┤
+│ ゴール           │ "goal"            │
+└──────────────────┴───────────────────┘
+
+location には実際のゾーン名だけ入れる（- 記法なし）。
+
+まずここを書いてみて。書けたら見せてくれたら次のステップに進む。
+
