@@ -1,3 +1,7 @@
+from pyfiglet import Figlet
+from termcolor import colored
+
+
 from find_path import CBSSolver
 from parser import parser, select_file, ParserError
 from graph import GraphValidationError
@@ -6,7 +10,8 @@ from find_path import PathNotFoundError
 
 def main() -> None:
     format_txt_file()
-    print("+x+x+x  Fly-in  x+x+x+")
+    F = Figlet(font='banner3-D')
+    print(colored(F.renderText("Fly-in"), 'cyan'))
     file = select_file()
     graph = parser(file)
     solver = CBSSolver(graph)

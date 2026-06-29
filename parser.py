@@ -241,6 +241,9 @@ def handle_zone(
         fetched: ParseUpdate,
         line_num: int
 ) -> None:
+    """
+    check and storing zones
+    """
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
         raise ZoneNameError(
@@ -255,6 +258,9 @@ def handle_connection(
         fetched: ParseUpdate,
         line_num: int
 ) -> None:
+    """
+    checking and storing connections
+    """
     pair = frozenset(
         {
             fetched.data[ConfigKeyWords.ORIGIN],
@@ -273,6 +279,10 @@ def handle_connection(
 
 
 def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
+    """
+    Parse a configuration line and dispatch it to the matching exporter
+    based on its title.
+    """
     for sep in SEPARATORS:
         if sep in line:
             title, _, info = line.partition(sep)
@@ -349,6 +359,9 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_attribute(
         atrbt: str, line_num: int, state: ParseState
 ) -> dict[str, Any]:
+    """
+    zone attribute
+    """
     if state is None:
         state = ParseState(
             zones=[], zone_names=set(),
@@ -429,7 +442,6 @@ def _get_connection_info(
 ) -> ParseUpdate:
     title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
-        # infos = info.split("-")
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
