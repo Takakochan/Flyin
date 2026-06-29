@@ -14,12 +14,13 @@ class MoveEvent:
     drone: int
     to: str
 
+
 class TimeLine:
     def __init__(self):
         self.turns: list[list[MoveEvent]] = []
 
     def add_turn(self, events: list[MoveEvent]) -> None:
-        self.turns.appe(events)
+        self.turns.append(events)
 
     def get_state(self, t: int, drone_id: int) -> DroneState:
         for event in self.turns[t]:
