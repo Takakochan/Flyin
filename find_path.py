@@ -1,4 +1,5 @@
 import heapq
+import time
 from collections import deque
 from itertools import count
 from dataclasses import dataclass
@@ -8,7 +9,7 @@ from parser import parser, select_file
 from graph import Graph
 from zone import Zone, ZoneType
 from draw_map import PlotlyVisualizer
-
+from time_line import TimeLine, MoveEvent
 
 @dataclass(frozen=True)
 class Constraint:
@@ -45,7 +46,9 @@ class CTNode:
         return sum(len(p) for p in self.paths.values())
 
     def __lt__(self, other: "CTNode") -> bool:
-        return self.cost < other.cost
+        if self.cost != other.cost:
+            return self.cost < other.cost
+        return len(self.constraints) < len(other.constraints)
 
 
 type Path = list[str]
@@ -74,23 +77,18 @@ class CBSSolver:
         """
         root = CTNode(frozenset(), root_paths)
         open_list = [root]
-        visited_nodes: set[frozenset[Constraint]] = set()
-        iteration = 0
+        time_start = time.time()
         while open_list:
             node = heapq.heappop(open_list)  # 最小コストを展開
-            if node.constraints in visited_nodes:
-                continue
-            visited_nodes.add(node.constraints)
-            iteration += 1
-            if iteration > 10000:
+            if time.time() - time_start > 50:
                 raise RuntimeError("CBS timeout")
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
-                print(f"finished at iter={iteration}")
-                PlotlyVisualizer.draw(self.graph, node.paths)
+                tl = to_timeline(node.paths)
+                PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths  # 衝突なし → 解
-            # 2つの子ノードを生成
+            # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
                 new_constraints = frozenset(node.constraints | {
                     Constraint(drone_id,
@@ -112,6 +110,7 @@ class CBSSolver:
                     new_paths = {**node.paths, drone_id: new_path}
                     child = CTNode(new_constraints, new_paths)
                     heapq.heappush(open_list, child)
+                    break
 
         return None
 
@@ -140,7 +139,8 @@ class CBSSolver:
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
-        PlotlyVisualizer.draw(self.graph, paths)
+        tl = to_timeline(paths)
+        PlotlyVisualizer.draw(self.graph, tl)
         return paths
 
     def _set_occupance_table(
@@ -213,6 +213,18 @@ class CBSSolver:
             conflict.dron_id_b, conflict.zone_name, conflict.time_step
         )
         return {constraint_b}
+
+
+def to_timeline(paths: Paths) -> TimeLine:
+    max_t = max(len(p) for p in paths.values())
+    tl = TimeLine()
+    for t in range(max_t):
+        events = []
+        for drone_id, path in paths.items():
+            zone = path[t] if t < len(path) else path[-1]
+            events.append(MoveEvent(drone_id, zone))
+        tl.add_turn(events)
+    return tl
 
 
 def a_star(

@@ -12,7 +12,7 @@ class DroneState:
 @dataclass
 class MoveEvent:
     drone: int
-    to: str
+    to: str  # zone|connection
 
 
 class TimeLine:

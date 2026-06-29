@@ -6,9 +6,9 @@ from find_path import PathNotFoundError
 
 def main() -> None:
     format_txt_file()
+    print("+x+x+x  Fly-in  x+x+x+")
     file = select_file()
     graph = parser(file)
-    print(f"Number of Drone: {graph.nb_drone}")
     solver = CBSSolver(graph)
     try:
         solver.solve()
@@ -17,7 +17,7 @@ def main() -> None:
 
 
 def format_txt_file() -> None:
-    file_name = "Dron_paths.txt"
+    file_name = "Drone_paths.txt"
     with open(file_name, "w", encoding="utf-8") as _:
         pass
 
