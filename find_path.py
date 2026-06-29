@@ -14,6 +14,13 @@ from time_line import TimeLine, MoveEvent
 
 @dataclass(frozen=True)
 class Constraint:
+    """A prohibition forbidding one drone from occupying a zone at a time.
+
+    Attributes:
+        dron_id: Identifier of the drone the constraint applies to.
+        zone_name: Name of the forbidden zone.
+        time_step: Time step at which the zone is forbidden.
+    """
     dron_id: int
     zone_name: str
     time_step: int
@@ -21,6 +28,14 @@ class Constraint:
 
 @dataclass(frozen=True)
 class Conflict:
+    """Two drones occupying the same over-capacity zone at the same time.
+
+    Attributes:
+        dron_id_a: Identifier of the first conflicting drone.
+        dron_id_b: Identifier of the second conflicting drone.
+        zone_name: Name of the contested zone (or connection endpoint).
+        time_step: Time step at which the conflict occurs.
+    """
     dron_id_a: int
     dron_id_b: int
     zone_name: str
@@ -28,25 +43,42 @@ class Conflict:
 
 
 class PathError(Exception):
+    """Base class for path-finding errors."""
     pass
 
 
 @dataclass
 class PathNotFoundError(PathError):
+    """Raised when A* cannot find a path within its step budget."""
     def __str__(self) -> str:
         return "Path was not found"
 
 
 @dataclass
 class CTNode:
+    """A node in the CBS constraint tree.
+
+    Attributes:
+        constraints: The set of constraints in force at this node.
+        paths: Current path per drone, keyed by drone id.
+    """
     constraints: frozenset[Constraint]
     paths: dict[int, list[str]]
 
     @property
     def cost(self) -> float:
+        """Total solution cost as the summed length of all drone paths."""
         return sum(len(p) for p in self.paths.values())
 
     def __lt__(self, other: "CTNode") -> bool:
+        """Order nodes by cost, breaking ties by fewer constraints.
+
+        Args:
+            other: The node to compare against.
+
+        Returns:
+            True if this node should be expanded before ``other``.
+        """
         if self.cost != other.cost:
             return self.cost < other.cost
         return len(self.constraints) < len(other.constraints)
@@ -57,10 +89,34 @@ type Paths = dict[int, Path]
 
 
 class CBSSolver:
+    """Conflict-Based Search solver over a map graph.
+
+    Coordinates per-drone A* searches and resolves inter-drone conflicts by
+    branching the constraint tree until a conflict-free set of paths is found.
+    """
     def __init__(self, graph: Graph) -> None:
+        """Store the graph the solver operates on.
+
+        Args:
+            graph: The map graph providing zones, connections and drone count.
+        """
         self.graph = graph
 
     def solve(self) -> Paths | None:
+        """Run high-level CBS to find conflict-free paths for all drones.
+
+        Builds a root node with an independent A* path per drone, then expands
+        the lowest-cost constraint-tree node, detecting conflicts and branching
+        by adding one constraint at a time. On success the resulting timeline
+        is drawn.
+
+        Returns:
+            A mapping of drone id to its path if a conflict-free solution is
+            found, otherwise ``None`` when the open list is exhausted.
+
+        Raises:
+            RuntimeError: If the search exceeds its 50-second time budget.
+        """
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
@@ -116,6 +172,19 @@ class CBSSolver:
         return None
 
     def solve2(self) -> Paths:
+        """Solve greedily by prioritized planning as a CBS fallback.
+
+        Plans drones one at a time. Before each drone, zones already filled to
+        capacity by previously planned drones (excluding start/end) become
+        constraints, so later drones route around them. Draws the timeline on
+        success.
+
+        Returns:
+            A mapping of drone id to its path.
+
+        Raises:
+            ValueError: If no path can be found for some drone.
+        """
         paths: dict[int, list[str]] = {}
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
@@ -148,9 +217,19 @@ class CBSSolver:
             self,
             paths: dict[int, list[str]]
     ) -> dict[tuple[str, int], list[int]]:
-        """
+        """Index which drones occupy each (zone, time) cell.
+
+        Connection cells (names containing ``-``) are skipped; only stationary
+        zone occupancy is recorded. Used for conflict detection.
         各 (ゾーン, 時刻) に居るドローンを記録する。衝突検出に使う。
         dict[(path, time_step),list[drone_id]
+
+        Args:
+            paths: Current path per drone.
+
+        Returns:
+            A mapping from ``(zone_name, time_step)`` to the list of drone ids
+            present there.
         """
         occupance_table: dict[tuple[str, int], list[int]] = {}
         for drone_id, path in paths.items():
@@ -168,7 +247,19 @@ class CBSSolver:
             self,
             paths: dict[int, list[str]]
     ) -> dict[tuple[str, str, int], list[int]]:
-        # 各 (origin, to, time) を通過するドローンを記録する
+        """Index which drones traverse each connection at each time step.
+
+        Looks at consecutive path entries, skipping connection cells and
+        self-loops, and matches the move against an existing graph connection
+        in either direction. 各 (origin, to, time) を通過するドローンを記録する
+
+        Args:
+            paths: Current path per drone.
+
+        Returns:
+            A mapping from ``(origin, to, time_step)`` to the list of drone ids
+            traversing that connection.
+        """
         conn_table: dict[tuple[str, str, int], list[int]] = {}
         for drone_id, path in paths.items():
             for t in range(1, len(path)):
@@ -189,6 +280,20 @@ class CBSSolver:
             occupance_table: dict[tuple[str, int], list[int]],
             paths: dict[int, list[str]],
     ) -> Conflict | None:
+        """Find the first capacity violation in zones or connections.
+
+        Checks zone occupancy against each zone's ``max_drones`` (ignoring
+        time 0 and start/end zones), then connection occupancy against each
+        link's ``max_link_capacity``.
+
+        Args:
+            occupance_table: Zone occupancy from :meth:`_set_occupance_table`.
+            paths: Current path per drone, used to derive connection usage.
+
+        Returns:
+            The first :class:`Conflict` found, or ``None`` if all paths respect
+            capacity limits.
+        """
         for (zone_name, time_step), dron_ids in occupance_table.items():
             if time_step == 0:
                 continue
@@ -209,7 +314,15 @@ class CBSSolver:
         return None
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
+        """Build the constraint for the second drone of a conflict.
 
+        Args:
+            conflict: The conflict to resolve.
+
+        Returns:
+            A single-element set constraining ``dron_id_b`` from the contested
+            zone at the conflict's time step.
+        """
         constraint_b = Constraint(
             conflict.dron_id_b, conflict.zone_name, conflict.time_step
         )
@@ -217,6 +330,17 @@ class CBSSolver:
 
 
 def to_timeline(paths: Paths) -> TimeLine:
+    """Convert per-drone paths into a turn-by-turn :class:`TimeLine`.
+
+    Drones that have already reached their goal stay at their final zone for
+    the remaining turns, so all drones are represented at every time step.
+
+    Args:
+        paths: Mapping of drone id to its path.
+
+    Returns:
+        A :class:`TimeLine` with one turn per time step up to the longest path.
+    """
     max_t = max(len(p) for p in paths.values())
     tl = TimeLine()
     for t in range(max_t):
@@ -236,7 +360,30 @@ def a_star(
     drone_id: int,
     h_scores: dict[str, int],
 ) -> list[str]:
+    """Find a time-expanded path for one drone respecting constraints.
 
+    Searches over ``(zone, time_step)`` states, allowing waiting in place,
+    skipping blocked zones, honoring per-drone constraints, and applying small
+    cost adjustments for priority zones and extra-step connections. Restricted
+    zones are recorded in the reconstructed path with an explicit
+    ``prev-current`` transition entry.
+
+    Args:
+        graph: The map graph being searched.
+        start: The drone's start zone.
+        goal: The drone's goal zone.
+        constraints: Constraints in force; only those matching ``drone_id``
+            apply.
+        drone_id: Identifier of the drone being planned.
+        h_scores: Heuristic step-distance to the goal per zone name.
+
+    Returns:
+        The path as a list of zone names (with ``prev-current`` entries for
+        restricted zones), or an empty list if the goal was not reached.
+
+    Raises:
+        PathNotFoundError: If the search exceeds its time-step budget.
+    """
     time_step: int = 0
     path: list[str] = []
     came_from: dict[
@@ -321,6 +468,19 @@ def a_star(
 
 
 def h_step_score(graph: Graph, goal: Zone) -> dict[str, int]:
+    """Compute step-distance from every zone to the goal via reverse BFS.
+
+    Builds a reverse adjacency from the graph and runs a breadth-first search
+    outward from the goal, giving an admissible heuristic for A*.
+
+    Args:
+        graph: The map graph providing adjacency.
+        goal: The goal zone to measure distances toward.
+
+    Returns:
+        A mapping from zone name to its step-distance to the goal. Zones
+        unreachable backward from the goal are absent.
+    """
     dist = {goal.name: 0}
     queue = deque([goal.name])
     reverse_adj: dict[str, list[str]] = {}
@@ -337,11 +497,24 @@ def h_step_score(graph: Graph, goal: Zone) -> dict[str, int]:
 
 
 class PriorityQueue:
+    """Min-heap of zones keyed by f-score with stable insertion order.
+
+    A monotonically increasing counter breaks f-score ties so that
+    :class:`Zone` objects are never compared directly.
+    """
     def __init__(self) -> None:
+        """Initialize an empty heap and the tie-breaking counter."""
         self._heap: list[tuple[float, int, Zone, int]] = []
         self._counter = count()
 
     def push(self, f_score: float, zone: Zone, time_step: int) -> None:
+        """Insert a zone state into the queue.
+
+        Args:
+            f_score: Priority value; lower is popped first.
+            zone: The zone associated with this state.
+            time_step: The time step associated with this state.
+        """
         heapq.heappush(
             self._heap,
             (f_score,
@@ -351,10 +524,16 @@ class PriorityQueue:
         )
 
     def pop(self) -> tuple[Zone, int]:
+        """Remove and return the lowest-f-score zone state.
+
+        Returns:
+            A ``(zone, time_step)`` tuple for the best state.
+        """
         f_score, _, zone, time_step = heapq.heappop(self._heap)
         return (zone, time_step)
 
     def is_empty(self) -> bool:
+        """Return whether the queue holds no states."""
         return len(self._heap) == 0
 
 

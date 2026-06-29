@@ -6,18 +6,22 @@ from functools import wraps
 from dataclasses import dataclass
 from enum import StrEnum, auto
 
-
 from domain.color import validate_color
 from graph import Graph
 from zone import Zone, ZoneType, ZoneRole, Position, validate_zone
 from connection import Connection
-
 
 type ExportFn = Callable[[str, int, ParseState], ParseUpdate]
 type SetterFn = Callable[[ConfigKeyWords, list[Any], int], Any]
 
 
 class ConfigKeyWords(StrEnum):
+    """Keywords used to tag and route parsed configuration fields.
+    The values double as dictionary keys for the parsed data so that the same
+    enum members identify both the kind of update an exporter produces and the
+    field names stored inside it.
+    """
+
     ZONE = auto()
     CONNECTION = auto()
     NAME = auto()
@@ -33,6 +37,16 @@ SEPARATORS = (":", "[", "=")
 
 @dataclass
 class ParseState:
+    """Mutable accumulator holding parsing progress for a single file.
+
+    Attributes:
+        zones: Parsed zone definitions, each stored as a keyword-to-value dict.
+        zone_names: Names of zones already seen, used to detect duplicates.
+        connections: Parsed connections keyed by their ``(origin, to)`` pair.
+        connection_seen: Unordered zone pairs already connected, used to detect
+                        duplicate connections regardless of direction.
+        nb_drones: Number of drones declared by the ``nb_drones`` line.
+    """
     zones: list[dict[str, Any]]
     zone_names: set[str]
     connections: dict[tuple[str, str], dict[str, Any]]
@@ -42,13 +56,20 @@ class ParseState:
 
 @dataclass
 class ParseUpdate:
+    """A single unit of data produced by an exporter for one input line.
+
+    Attributes:
+        target: The :class:`ConfigKeyWords` category this update belongs to.
+        data: Field values extracted from the line.
+        line_num: 1-based line number the data was read from.
+    """
     target: str
     data: dict[str, Any]
     line_num: int
 
 
 class ParserError(Exception):
-    """base"""
+    """Base class for all errors raised while parsing a map file."""
 
     pass
 
@@ -154,6 +175,16 @@ class ZoneNameError(ParserError):
 
 
 def register_exporter(key_word: str) -> Callable[[ExportFn], ExportFn]:
+    """Create a decorator that registers an exporter under a keyword.
+
+    Args:
+        key_word: Leading keyword that maps to the decorated exporter in
+            :data:`EXPORTERS`.
+
+    Returns:
+        A decorator that registers the function in :data:`EXPORTERS` and
+        returns it unchanged.
+    """
     def decorator(func: ExportFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -166,6 +197,16 @@ def register_exporter(key_word: str) -> Callable[[ExportFn], ExportFn]:
 
 
 def setter_machine(name: ConfigKeyWords) -> Callable[[SetterFn], ExportFn]:
+    """Create a decorator that registers a setter under a config keyword.
+
+    Args:
+        name: The :class:`ConfigKeyWords` key the decorated setter is stored
+            under in :data:`SETTERS`.
+
+    Returns:
+        A decorator that registers the function in :data:`SETTERS` and returns
+        it unchanged.
+    """
     def decorator(func: SetterFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -178,6 +219,16 @@ def setter_machine(name: ConfigKeyWords) -> Callable[[SetterFn], ExportFn]:
 
 
 def select_file() -> str:
+    """Prompt the user to choose a map file from ``maps/``.
+
+    Searches ``maps/**/*.txt`` and presents the matches in an interactive list.
+
+    Returns:
+        The path of the selected ``.txt`` map file.
+
+    Raises:
+        ValueError: If the prompt is cancelled and no file is selected.
+    """
     dir_path = glob.glob("maps/**/*.txt")
     question = [
         inquirer.List(
@@ -195,6 +246,26 @@ def select_file() -> str:
 
 
 def parser(file_path: str) -> Graph:
+    """Parse a map file into a :class:`Graph`.
+
+    Reads the file line by line, skipping blank lines and ``#`` comments,
+    dispatches each line to its exporter, and accumulates zones, connections
+    and the drone count. Start and end zones inherit ``nb_drones`` as their
+    ``max_drones`` before the graph is built.
+
+    Args:
+        file_path: Path to the map definition file.
+
+    Returns:
+        A :class:`Graph` built from the parsed zones, connections and drone
+        count.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        PermissionError: If the file cannot be read.
+        FormatError: If the required ``nb_drones`` declaration is missing.
+        ParserError: For any other validation failure raised while parsing.
+    """
     state = ParseState(
         zones=[],
         zone_names=set(),
@@ -241,8 +312,15 @@ def handle_zone(
         fetched: ParseUpdate,
         line_num: int
 ) -> None:
-    """
-    check and storing zones
+    """Record a parsed zone, rejecting duplicate names.
+
+    Args:
+        state: Parsing accumulator to update in place.
+        fetched: Parsed zone data for the current line.
+        line_num: 1-based line number for error reporting.
+
+    Raises:
+        ZoneNameError: If the zone name was already declared.
     """
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
@@ -258,8 +336,18 @@ def handle_connection(
         fetched: ParseUpdate,
         line_num: int
 ) -> None:
-    """
-    checking and storing connections
+    """Record a parsed connection, rejecting duplicate pairs.
+
+    The duplicate check is direction-insensitive, so ``a-b`` and ``b-a`` are
+    treated as the same connection.
+
+    Args:
+        state: Parsing accumulator to update in place.
+        fetched: Parsed connection data for the current line.
+        line_num: 1-based line number for error reporting.
+
+    Raises:
+        DuplicatedConnectionError: If the same zone pair was already connected.
     """
     pair = frozenset(
         {
@@ -279,9 +367,22 @@ def handle_connection(
 
 
 def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
-    """
-    Parse a configuration line and dispatch it to the matching exporter
-    based on its title.
+    """Dispatch a line to its registered exporter by leading keyword.
+
+    The keyword is taken as the text before the first separator found in
+    :data:`SEPARATORS`.
+
+    Args:
+        line: Raw, stripped input line.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator, passed through to the exporter.
+
+    Returns:
+        The :class:`ParseUpdate` produced by the matching exporter.
+
+    Raises:
+        HubFormatError: If the line contains no known separator, or the
+            extracted keyword has no registered exporter.
     """
     for sep in SEPARATORS:
         if sep in line:
@@ -297,6 +398,20 @@ def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 
 @register_exporter("nb_drones")
 def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
+    """Parse a ``nb_drones: <n>`` line.
+
+    Args:
+        line: Raw input line.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator (unused).
+
+    Returns:
+        A :class:`ParseUpdate` carrying the drone count.
+
+    Raises:
+        FormatError: If the line does not have exactly two whitespace tokens.
+        ValueRangeError: If the count is not a positive integer.
+    """
     words = line.split()
     if len(words) != 2:
         raise FormatError(
@@ -324,6 +439,27 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 @register_exporter("end_hub")
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
+    """Parse a ``hub`` / ``start_hub`` / ``end_hub`` line into a zone.
+
+    Splits the line into the positional part (role, name, x, y) and the
+    bracketed attribute part, then merges the parsed attributes onto the zone
+    data. The role is derived from the keyword's prefix (e.g. ``start_hub`` ->
+    ``start``).
+
+    Args:
+        line: Raw input line.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator, forwarded to attribute parsing.
+
+    Returns:
+        A :class:`ParseUpdate` describing the zone (role, name, position and
+        attributes).
+
+    Raises:
+        HubFormatError: If the attribute brackets are missing or the positional
+            part does not have exactly four tokens.
+        ValueRangeError: If the coordinates are not integers.
+    """
     if "[" not in line and "]" not in line:
         raise HubFormatError(
             line_num, "Attribute is not given"
@@ -359,8 +495,22 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_attribute(
         atrbt: str, line_num: int, state: ParseState
 ) -> dict[str, Any]:
-    """
-    zone attribute
+    """Parse the bracketed attribute section of a hub line.
+
+    Accepts up to three attributes (``zone``, ``color``, ``max_drones``), each
+    at most once, and merges their parsed values into a single dict.
+
+    Args:
+        atrbt: Attribute text, optionally still wrapped in a trailing ``]``.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator; a fresh one is created if ``None``.
+
+    Returns:
+        A dict mapping attribute fields to their parsed values.
+
+    Raises:
+        HubAttributeError: If more than three attributes are given, or any
+            single attribute appears more than once.
     """
     if state is None:
         state = ParseState(
@@ -391,6 +541,19 @@ def _get_attribute(
 
 @register_exporter("color")
 def _get_color(line: str, line_num: int, state: ParseState) -> ParseUpdate:
+    """Parse a ``color=<name>`` attribute.
+
+    Args:
+        line: Attribute token of the form ``color=<name>``.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator (unused).
+
+    Returns:
+        A :class:`ParseUpdate` carrying the validated color.
+
+    Raises:
+        ParserError: If the color value fails validation.
+    """
     title, _, info = line.partition("=")
     color = validate_color(info, line_num)
     return ParseUpdate(
@@ -402,8 +565,21 @@ def _get_color(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_zone_atrbt(
     line: str, line_num: int, state: ParseState
 ) -> ParseUpdate:
-    """
-    check one of those attributes ex)zone=restricted color=darkred max_drones=1
+    """Parse a ``zone=<type>`` attribute.
+
+    Validates the zone type against the allowed values (e.g.
+    ``zone=restricted``) and wraps it as a :class:`ZoneType`.
+
+    Args:
+        line: Attribute token of the form ``zone=<type>``.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator (unused).
+
+    Returns:
+        A :class:`ParseUpdate` carrying the validated :class:`ZoneType`.
+
+    Raises:
+        ParserError: If the zone value fails validation.
     """
     _, _, info = line.partition("=")
     zone = validate_zone(info, line_num)
@@ -418,6 +594,19 @@ def _get_zone_atrbt(
 def _get_max_drone_nb(
     line: str, line_num: int, state: ParseState
 ) -> ParseUpdate:
+    """Parse a ``max_drones=<n>`` attribute.
+
+    Args:
+        line: Attribute token of the form ``max_drones=<n>``.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator (unused).
+
+    Returns:
+        A :class:`ParseUpdate` carrying the maximum drone count.
+
+    Raises:
+        ValueRangeError: If the value is not a non-negative integer.
+    """
     _, _, nb_drone = line.partition("=")
     try:
         nb_drones = int(nb_drone)
@@ -440,8 +629,27 @@ def _get_max_drone_nb(
 def _get_connection_info(
     line: str, line_num: int, state: ParseState
 ) -> ParseUpdate:
+    """Parse a ``connection: <a>-<b> [..]`` line.
+
+    Handles both the bare ``<a>-<b>`` form and the form with a trailing
+    bracketed attribute.
+
+    Args:
+        line: Raw input line.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator, used to validate zone names.
+
+    Returns:
+        A :class:`ParseUpdate` describing the connection endpoints and any
+        parsed attribute.
+
+    Raises:
+        ConnectionFormatError: If the endpoint format is wrong, the names do
+            not match existing zones, or the attribute is malformed.
+    """
     title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
+        # infos = info.split("-")
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
@@ -466,6 +674,21 @@ def _get_connection_info(
 def _check_connection_format(
     line_num: int, info: str, state: ParseState
 ) -> list[str]:
+    """Validate the ``<a>-<b>`` endpoint part of a connection.
+
+    Args:
+        line_num: 1-based line number for error reporting.
+        info: The endpoint text, expected to be ``<origin>-<to>``.
+        state: Current parsing accumulator, used to verify the zone names
+            exist.
+
+    Returns:
+        The two endpoint names as ``[origin, to]``.
+
+    Raises:
+        ConnectionFormatError: If the text does not split into exactly two
+            names, or a name does not match an existing zone.
+    """
     infos = info.split("-")
     if len(infos) != 2:
         raise ConnectionFormatError(
@@ -482,6 +705,20 @@ def _check_connection_format(
 def _get_connection_attribute(
         line: str, line_num: int, state: ParseState
 ) -> dict[str, str]:
+    """Parse the ``max_link_capacity=<n>`` attribute of a connection.
+
+    Args:
+        line: Attribute text, optionally still wrapped in a trailing ``]``.
+        line_num: 1-based line number for error reporting.
+        state: Current parsing accumulator (unused).
+
+    Returns:
+        A dict mapping ``"max_link_capacity"`` to its string value.
+
+    Raises:
+        ConnectionFormatError: If the key is misspelled, the value is not an
+            integer, or the value is less than 1.
+    """
     zones = line.strip("]")
     title, _, max_num = zones.partition("=")
     if title != "max_link_capacity":

@@ -6,8 +6,29 @@ from time_line import TimeLine
 
 
 class PlotlyVisualizer:
+    """Render a map graph and an animated drone timeline with Plotly."""
     @staticmethod
     def draw(graph: Graph, tl: TimeLine) -> None:
+        """Build and display an animated Plotly figure of the solved map.
+
+        Draws, in order: the connection edges (with capacity hover labels),
+        invisible midpoint markers carrying per-edge hover text, the zones
+        (with a special multi-ring "rainbow" rendering), and an animated drone
+        layer driven by the timeline. Each turn's drone moves are also appended
+        to ``Drone_paths.txt`` as a side effect.
+
+        Args:
+            graph: The map graph providing zones and connections to plot.
+            tl: The solved timeline whose turns drive the drone animation.
+
+        Returns:
+            None. The figure is shown via
+            :meth:`plotly.graph_objects.Figure.show`.
+
+        Side Effects:
+            Appends one line per turn (turns >= 1) to ``Drone_paths.txt`` in
+            the current working directory.
+        """
         fig = go.Figure()
         edge_x = []
         edge_y = []
@@ -124,6 +145,25 @@ class PlotlyVisualizer:
         Connection {zone_name}-{prev_name}: 0/1 used
         """
         def _drone_scatter(t: int) -> go.Scatter:
+            """Build the drone marker trace for a single timeline turn.
+
+            For each drone active at turn ``t``, resolves its position from the
+            timeline state. Drones inside a restricted zone are drawn at the
+            midpoint between their current and previous zone so the move is
+            visible. Movements relative to the previous turn are also collected
+            and appended to ``Drone_paths.txt``.
+
+            Args:
+                t: Index of the timeline turn to render.
+
+            Returns:
+                A :class:`plotly.graph_objects.Scatter` trace of the drone
+                positions, labels and hover text for turn ``t``.
+
+            Side Effects:
+                For ``t >= 1``, appends a line of moved-drone tokens to
+                ``Drone_paths.txt``.
+            """
             x, y, hover, labels, zone_names = [], [], [], [], []
             for event in sorted(tl.turns[t], key=lambda e: e.drone):
                 drone_id = event.drone
