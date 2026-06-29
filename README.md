@@ -42,14 +42,11 @@ make clean
 ```
 nb_drones: 2
 
-<<<<<<< HEAD
-=======
 # Example
 ### Input (`maps/easy/01_linear_path.txt`)
 ```
 nb_drones: 2
 
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
 start_hub: start 0 0 [color=green]
 hub: waypoint1 1 0 [color=blue]
 hub: waypoint2 2 0 [color=blue]
@@ -64,11 +61,7 @@ Two drones start at `start` and must each reach `goal` through `waypoint1` and `
 The link `start-waypoint1` has default capacity 1, so they cannot both enter `waypoint1` at the same time.
 CBS staggers their departure to avoid a conflict.
 
-<<<<<<< HEAD
-### Output (`Dron_paths.txt`)
-=======
 ### Output (`Drone_paths.txt`)
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
 
 ```
 D2-waypoint1
