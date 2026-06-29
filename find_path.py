@@ -3,7 +3,7 @@ import time
 from collections import deque
 from itertools import count
 from dataclasses import dataclass
-import pandas as pd
+
 
 from parser import parser, select_file
 from graph import Graph

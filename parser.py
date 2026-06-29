@@ -84,7 +84,7 @@ class HubAttributeDupplicatedError(ParserError):
     def __str__(self) -> str:
         return (
             f"Line {self.line_num}: {self.detail} "
-            "Each attribute (zone, color, max_drones) may appear only once."
+            "Each attribute (zone, color, max_drones) shoul appear only once."
         )
 
 
