@@ -32,7 +32,7 @@ debug:
 	uv run python -m pdb $(MAIN_PROGRAM) config.txt
 
 test:
-	uvx pytest
+	uv run pytest
 
 clean:
 	uvx ruff clean

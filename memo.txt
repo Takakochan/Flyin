@@ -1,0 +1,51 @@
+全体的な評価をまとめる。
+
+---
+合格できそうな項目 ✅
+
+- OOP — CBSSolver, Graph, Zone, Connection, TimeLine など適切なクラス設計
+- Graph実装 — networkx等の禁止ライブラリなし
+- Parser — フォーマット・エラー処理あり
+- アルゴリズム — CBS + A* 実装済み
+- Visual — Plotly インタラクティブ可視化
+- --capacity-info フラグ — main.py に実装済み
+- README — 必須セクションあり、英語
+- Zone/Connection capacity — 実装済み
+
+---
+問題のある項目 ❌
+
+1. mypy エラー（Type safe 不合格）
+
+find_path.py:142: solve2() が TimeLine の代わりに dict を draw() に渡してる
+time_line.py:19: __init__ に -> None がない
+solve2() が Timeline リファクタから取り残されてる。
+
+2. flake8 E501（line too long）
+
+.flake8 は E101 しか ignore してないので、E501 が複数ファイルで出てる。max-line-length を 88 に設定するか、行を折り返す必要がある。
+
+3. docstring なし（PEP 257 要求）
+
+仕様書に「Include docstrings in functions and classes following PEP 257」と明記されてる。主要な関数・クラスにほぼ docstring がない。
+
+4. テストファイルの mypy エラー
+
+tests/ の全関数に -> None がない（21エラー）。
+
+---
+優先度
+
+┌──────┬───────────────────────────────────┐
+│ 優先 │               項目                │
+├──────┼───────────────────────────────────┤
+│ 高   │ solve2() の Timeline 対応         │
+├──────┼───────────────────────────────────┤
+│ 高   │ mypy を通す（-> None 追加）       │
+├──────┼───────────────────────────────────┤
+│ 高   │ flake8 の max-line-length 設定    │
+├──────┼───────────────────────────────────┤
+│ 中   │ 主要クラス・関数に docstring 追加 │
+└──────┴───────────────────────────────────┘
+
+まず solve2() から直す？

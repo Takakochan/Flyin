@@ -9,6 +9,7 @@ from parser import parser, select_file
 from graph import Graph
 from zone import Zone, ZoneType
 from draw_map import PlotlyVisualizer
+from time_line import TimeLine, MoveEvent
 
 
 @dataclass(frozen=True)
@@ -82,9 +83,10 @@ class CBSSolver:
             occupance_table = self._set_occupance_table(node.paths)
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
-                if capacity_info:
-                    self._print_capacity_info(node.paths)
-                PlotlyVisualizer.draw(self.graph, node.paths)
+                tl = to_timeline(node.paths)
+                # if capacity_info:
+                self._print_capacity_info(tl)
+                PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
@@ -138,6 +140,13 @@ class CBSSolver:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
         PlotlyVisualizer.draw(self.graph, paths)
+        max_t = max(len(p) for p in paths.values())
+        df = pd.DataFrame(
+            {f"D{ind + 1}": (path + [path[-1]] * (max_t - len(path)))
+             for ind, path in paths.items()}
+        )
+        df.index.name = "t"
+        print(df.iloc[10:20][["D1", "D2", "D3", "D4"]].to_string())
         return paths
 
     def _set_occupance_table(
@@ -208,50 +217,14 @@ class CBSSolver:
                     earliest = c
         return earliest
 
-    # def _print_capacity_info(self, paths: Paths) -> None:
-    #     # ターンごとにゾーンとコネクションの使用状況を表示する
-    #     max_t = max(len(p) for p in paths.values())
-    #     for t in range(1, max_t):
-    #         print(f"--- Turn {t} ---")
-
-    #         # ゾーンの使用状況: path[t] を全ドローンから集めてカウント
-    #         zone_count: dict[str, int] = {}
-    #         for path in paths.values():
-    #             name = path[t] if t < len(path) else path[-1]
-    #             if "-" in name:
-    #                 name = name[name.find("-") + 1:]
-    #             zone_count[name] = zone_count.get(name, 0) + 1
-    #         for zone_name, counting in sorted(zone_count.items()):
-    #             cap = self.graph.zones[zone_name].max_drones
-    #             print(f"  Zone {zone_name}: {counting}/{cap} drones")
-
-    #         # コネクションの使用状況: path[t-1]→path[t] の移動をカウント
-    #         conn_count: dict[tuple[str, str], int] = {}
-    #         for path in paths.values():
-    #             if t >= len(path):
-    #                 continue
-    #             prev, curr = path[t - 1], path[t]
-    #             if "-" in prev or "-" in curr or prev == curr:
-    #                 continue
-    #             if (prev, curr) in self.graph.connections:
-    #                 key = (prev, curr)
-    #             elif (curr, prev) in self.graph.connections:
-    #                 key = (curr, prev)
-    #             else:
-    #                 continue
-    #             conn_count[key] = conn_count.get(key, 0) + 1
-    #         for (origin, to), counting in sorted(conn_count.items()):
-    #             cap = self.graph.connections[(origin, to)].max_link_capacity
-    #             print(f"  Connection {origin}-{to}: {counting}/{cap} capacity used")
-
-    def _print_capacity_info(self, paths: Paths) -> None:
-        max_t = max(len(p) for p in paths.values())
-        for t in range(1, max_t):
+    def _print_capacity_info(self, tl: TimeLine) -> None:
+        for t in range(1, len(tl.turns)):
             print(f"===Turn {t}===")
             zone_count: dict[str, int] = {}
-            for path in paths.values():
-                name = path[t] if t < len(path) else path[-1]
-                if "-" in name:
+            for event in tl.turns[t]:
+                state = tl.get_state(t, event.drone)
+                name = state.location
+                if state.status == "connection":
                     name = name[name.find("-") + 1:]
                 zone_count[name] = zone_count.get(name, 0) + 1
             for zone_name, counting in sorted(zone_count.items()):
@@ -371,6 +344,18 @@ def h_step_score(graph: Graph, goal: Zone) -> dict[str, int]:
                 dist[prev] = dist[current] + 1
                 queue.append(prev)
     return dist
+
+
+def to_timeline(paths: Paths) -> TimeLine:
+    max_t = max(len(p) for p in paths.values())
+    tl = TimeLine()
+    for t in range(max_t):
+        events = []
+        for drone_id, path in paths.items():
+            zone = path[t] if t < len(path) else path[-1]
+            events.append(MoveEvent(drone_id, zone))
+        tl.add_turn(events)
+    return tl
 
 
 class PriorityQueue:
