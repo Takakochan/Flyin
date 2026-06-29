@@ -5,14 +5,36 @@ from pydantic import BaseModel, Field
 
 
 class Position(NamedTuple):
+<<<<<<< HEAD
     x: float
     y: float
+=======
+    """A 2D grid coordinate.
+
+    Attributes:
+        x: Horizontal coordinate.
+        y: Vertical coordinate.
+    """
+    x: int
+    y: int
+>>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
 
 
 class PositionValueError(Exception):
-    """position values don't have right format"""
+    """Raised when a position value has an invalid format.
+
+    Attributes:
+        value: The offending position value.
+        message: Human-readable description of the problem.
+    """
 
     def __init__(self, value: int, message: str) -> None:
+        """Store the offending value and message.
+
+        Args:
+            value: The position value that failed validation.
+            message: Human-readable description of the problem.
+        """
         self.value = value
         self.message = message
         super().__init__(message)
@@ -20,6 +42,12 @@ class PositionValueError(Exception):
 
 @dataclass
 class ZoneTypeNotExistError(ValueError):
+    """Raised when a zone type string is not a valid :class:`ZoneType`.
+
+    Attributes:
+        line_num: 1-based line number where the invalid type appeared.
+        value: The offending zone type string.
+    """
     line_num: int
     value: str
 
@@ -29,6 +57,12 @@ class ZoneTypeNotExistError(ValueError):
 
 
 class ZoneType(StrEnum):
+    """Movement semantics of a zone.
+
+    Members prefixed with ``_`` are internal: ``_NORMAL`` is the default and
+    ``_BLOCKED`` marks zones drones may not enter. ``RESTRICTED`` and
+    ``PRIORITY`` are the user-specifiable types.
+    """
     _NORMAL = auto()
     _BLOCKED = auto()
     RESTRICTED = auto()
@@ -36,6 +70,7 @@ class ZoneType(StrEnum):
 
 
 class ZoneRole(StrEnum):
+    """Role of a zone within the route: start, intermediate hub, or end."""
     START = auto()
     EXTRA = auto()
     HUB = auto()
@@ -43,6 +78,16 @@ class ZoneRole(StrEnum):
 
 
 class Zone(BaseModel):
+    """A node in the map graph.
+
+    Attributes:
+        zone_role: Role within the route. Defaults to :attr:`ZoneRole.HUB`.
+        name: Unique zone name.
+        position: Grid coordinate of the zone.
+        zone_type: Movement semantics. Defaults to ``_NORMAL``.
+        color: Optional display color name.
+        max_drones: Maximum drones allowed at once. Defaults to 1, minimum 0.
+    """
     zone_role: ZoneRole = ZoneRole.HUB
     name: str
     position: Position
@@ -52,11 +97,24 @@ class Zone(BaseModel):
 
 
 class ZoneState(Enum):
+    """Runtime occupancy state of a zone."""
     AVAILABLE = auto()
     OCCUPIED = auto()
 
 
 def validate_zone(info: str, line_num: int) -> str:
+    """Validate a zone type string against :class:`ZoneType`.
+
+    Args:
+        info: The raw zone type string to validate.
+        line_num: 1-based line number for error reporting.
+
+    Returns:
+        The matching :class:`ZoneType` value.
+
+    Raises:
+        ZoneTypeNotExistError: If the string is not a valid zone type.
+    """
     try:
         zone = ZoneType(info)
     except ValueError:

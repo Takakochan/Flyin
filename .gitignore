@@ -8,7 +8,13 @@ build/
 dist/
 wheels/
 *.egg-info
-
+.mypy_cache/
+.flake8
 # Virtual environments
 .venv
+<<<<<<< HEAD
 >>>>>>> ab84996377440b6c08459380ed8df1d450a126aa
+=======
+
+Drone_paths.txt
+>>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb

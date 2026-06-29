@@ -58,7 +58,4 @@ format:
 	uvx ruff check --fix --select=I001
 	uvx ruff format
 
-build:
-	uvx --from build pyproject-build --outdir ./
-
 .PHONY: all install run debug test clean lint lint-strict format build

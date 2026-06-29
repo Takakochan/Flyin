@@ -1,4 +1,9 @@
 inquirer
 pydantic
 plotly
+<<<<<<< HEAD
 pandas
+=======
+pyfiglet
+termcolor
+>>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb

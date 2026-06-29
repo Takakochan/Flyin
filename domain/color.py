@@ -155,6 +155,12 @@ CSS_COLORS = {
 
 @dataclass
 class ColorError(ValueError):
+    """Raised when a color value is not a recognized named CSS color.
+
+    Attributes:
+        line_num: 1-based line number where the invalid color appeared.
+        value: The offending color string as written in the file.
+    """
     line_num: int
     value: str
 
@@ -167,6 +173,21 @@ class ColorError(ValueError):
 
 
 def validate_color(value: str, line_num: int) -> str:
+    """Validate and normalize a named CSS color.
+
+    The value is stripped of surrounding whitespace and lowercased before being
+    checked against :data:`CSS_COLORS`.
+
+    Args:
+        value: The raw color string to validate.
+        line_num: 1-based line number for error reporting.
+
+    Returns:
+        The normalized (stripped, lowercased) color name.
+
+    Raises:
+        ColorError: If the normalized value is not a known CSS color name.
+    """
     v = value.strip().lower()
     if v not in CSS_COLORS:
         raise ColorError(line_num, value)

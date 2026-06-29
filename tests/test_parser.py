@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import unittest
 from parser import _get_attribute, HubAttributeDupplicatedError, ValueRangeError
 from zone import ZoneType
@@ -69,3 +70,14 @@ class TestGetAttribute(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+=======
+from parser import parser
+
+
+def test_linear_map() -> None:
+    graph = parser("maps/easy/01_linear_path.txt")
+
+    assert graph.nb_drone == 5
+    assert len(graph.zones) == 4
+    assert len(graph.connections) == 3
+>>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
