@@ -11,6 +11,7 @@ from zone import Zone, ZoneType
 from draw_map import PlotlyVisualizer
 from time_line import TimeLine, MoveEvent
 
+
 @dataclass(frozen=True)
 class Constraint:
     dron_id: int

@@ -16,7 +16,7 @@ class MoveEvent:
 
 
 class TimeLine:
-    def __init__(self):
+    def __init__(self) -> None:
         self.turns: list[list[MoveEvent]] = []
 
     def add_turn(self, events: list[MoveEvent]) -> None:
