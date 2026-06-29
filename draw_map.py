@@ -142,7 +142,7 @@ class PlotlyVisualizer:
                     previous_zone = graph.zones[prev_name]
                     x.append((zone.position.x + previous_zone.position.x) / 2)
                     y.append((zone.position.y + previous_zone.position.y) / 2)
-                    # zone_name = f"{previous_zone.name}-{zone.name}"
+                    zone_name = f"{previous_zone.name}-{zone.name}"
                 else:
                     x.append(zone.position.x)
                     y.append(zone.position.y)
