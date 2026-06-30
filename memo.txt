@@ -1,51 +1,23 @@
-全体的な評価をまとめる。
 
----
-合格できそうな項目 ✅
+全ファイルを読んでから解決します。
 
-- OOP — CBSSolver, Graph, Zone, Connection, TimeLine など適切なクラス設計
-- Graph実装 — networkx等の禁止ライブラリなし
-- Parser — フォーマット・エラー処理あり
-- アルゴリズム — CBS + A* 実装済み
-- Visual — Plotly インタラクティブ可視化
-- --capacity-info フラグ — main.py に実装済み
-- README — 必須セクションあり、英語
-- Zone/Connection capacity — 実装済み
+  Read 1 file
 
----
-問題のある項目 ❌
+現在の状態を再確認します。
 
-1. mypy エラー（Type safe 不合格）
+  Searched for 1 pattern, ran 1 shell command
 
-find_path.py:142: solve2() が TimeLine の代わりに dict を draw() に渡してる
-time_line.py:19: __init__ に -> None がない
-solve2() が Timeline リファクタから取り残されてる。
+コンフリクトマーカーは解決された。ただ main.py が pyfiglet をインポートしようとしてクラッシュしてる。全ファイルを確認します。
 
-2. flake8 E501（line too long）
+  Read 1 file, ran 2 shell commands
 
-.flake8 は E101 しか ignore してないので、E501 が複数ファイルで出てる。max-line-length を 88 に設定するか、行を折り返す必要がある。
+問題が明確になった。まとめて修正します。
 
-3. docstring なし（PEP 257 要求）
-
-仕様書に「Include docstrings in functions and classes following PEP 257」と明記されてる。主要な関数・クラスにほぼ docstring がない。
-
-4. テストファイルの mypy エラー
-
-tests/ の全関数に -> None がない（21エラー）。
-
----
-優先度
-
-┌──────┬───────────────────────────────────┐
-│ 優先 │               項目                │
-├──────┼───────────────────────────────────┤
-│ 高   │ solve2() の Timeline 対応         │
-├──────┼───────────────────────────────────┤
-│ 高   │ mypy を通す（-> None 追加）       │
-├──────┼───────────────────────────────────┤
-│ 高   │ flake8 の max-line-length 設定    │
-├──────┼───────────────────────────────────┤
-│ 中   │ 主要クラス・関数に docstring 追加 │
-└──────┴───────────────────────────────────┘
-
-まず solve2() から直す？
+問題一覧：
+1. main.py — import argparse 欠落、file が args.map_file を無視
+2. parser.py:536 — HubAttributeDupplicatedError（旧名）を使用
+3. find_path.py — to_timeline が2箇所に重複定義
+4. test_parser.py — 旧クラス名参照、-> None 欠落
+5. test_time_line.py — -> None 欠落
+6. .flake8 — max-line-length 未設定（79文字制限が厳しすぎる）
+7. zone.py — 末尾空行

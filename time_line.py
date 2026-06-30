@@ -4,10 +4,6 @@ from typing import Literal
 
 @dataclass
 class DroneState:
-<<<<<<< HEAD
-    id: int
-    location: str  # zone | connection
-=======
     """A single drone's position at one point in time.
 
     Attributes:
@@ -18,26 +14,11 @@ class DroneState:
     """
     id: int
     location: str
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
     status: Literal["zone", "connection", "goal"]
 
 
 @dataclass
 class MoveEvent:
-<<<<<<< HEAD
-    drone: int
-    to: str  # zone | connection
-
-
-class TimeLine:
-    def __init__(self):
-        self.turns: list[list[MoveEvent]] = []
-
-    def add_turn(self, events: list[MoveEvent]) -> None:
-        self.turns.append(events)
-
-    def get_state(self, t: int, drone_id: int) -> DroneState:
-=======
     """A drone moving to a destination on a given turn.
 
     Attributes:
@@ -82,15 +63,10 @@ class TimeLine:
         Raises:
             KeyError: If the drone has no event recorded at turn ``t``.
         """
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
         for event in self.turns[t]:
             if drone_id == event.drone:
                 return DroneState(
                     id=event.drone,
                     location=event.to,
                     status="connection" if "-" in event.to else "zone")
-<<<<<<< HEAD
-        raise KeyError(f"drone {drone_id} not found as t={t}")
-=======
         raise KeyError(f"drone {drone_id} not found as t = {t}")
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb

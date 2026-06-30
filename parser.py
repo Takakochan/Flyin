@@ -98,23 +98,7 @@ class HubAttributeError(ParserError):
 
 
 @dataclass
-<<<<<<< HEAD
-class HubAttributeDupplicatedError(ParserError):
-    line_num: int
-    detail: str
-
-    def __str__(self) -> str:
-        return (
-            f"Line {self.line_num}: {self.detail} "
-            "Each attribute (zone, color, max_drones) shoul appear only once."
-        )
-
-
-@dataclass
-class HubFormatError(ParserError):
-=======
 class HubAttributeDuplicatesError(ParserError):
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
     line_num: int
     detail: str
 
@@ -455,9 +439,6 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 @register_exporter("end_hub")
 @register_exporter("hub")
 def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
-<<<<<<< HEAD
-    if "[" not in line or "]" not in line:
-=======
     """Parse a ``hub`` / ``start_hub`` / ``end_hub`` line into a zone.
 
     Splits the line into the positional part (role, name, x, y) and the
@@ -480,7 +461,6 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
         ValueRangeError: If the coordinates are not integers.
     """
     if "[" not in line and "]" not in line:
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
         raise HubFormatError(
             line_num, "Attribute is not given"
         )
@@ -515,8 +495,6 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_attribute(
         atrbt: str, line_num: int, state: ParseState | None = None
 ) -> dict[str, Any]:
-<<<<<<< HEAD
-=======
     """Parse the bracketed attribute section of a hub line.
 
     Accepts up to three attributes (``zone``, ``color``, ``max_drones``), each
@@ -534,7 +512,6 @@ def _get_attribute(
         HubAttributeError: If more than three attributes are given, or any
             single attribute appears more than once.
     """
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
     if state is None:
         state = ParseState(
             zones=[], zone_names=set(),
@@ -556,7 +533,7 @@ def _get_attribute(
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeDupplicatedError(line_num, "Duplicate attribute.")
+            raise HubAttributeDuplicatesError(line_num, "Duplicate attribute.")
         update = export_data(word, line_num, state)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -588,10 +565,6 @@ def _get_color(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 def _get_zone_atrbt(
     line: str, line_num: int, state: ParseState
 ) -> ParseUpdate:
-<<<<<<< HEAD
-    """
-    check one of those attributes ex) zone=restricted color=darkred max_drones=1
-=======
     """Parse a ``zone=<type>`` attribute.
 
     Validates the zone type against the allowed values (e.g.
@@ -607,7 +580,6 @@ def _get_zone_atrbt(
 
     Raises:
         ParserError: If the zone value fails validation.
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
     """
     _, _, info = line.partition("=")
     zone = validate_zone(info, line_num)
@@ -677,10 +649,7 @@ def _get_connection_info(
     """
     title, _, info = line.partition(": ")
     if "[" not in info:  # if no attributes
-<<<<<<< HEAD
-=======
         # infos = info.split("-")
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,

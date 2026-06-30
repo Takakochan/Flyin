@@ -5,10 +5,6 @@ from pydantic import BaseModel, Field
 
 
 class Position(NamedTuple):
-<<<<<<< HEAD
-    x: float
-    y: float
-=======
     """A 2D grid coordinate.
 
     Attributes:
@@ -17,7 +13,6 @@ class Position(NamedTuple):
     """
     x: int
     y: int
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb
 
 
 class PositionValueError(Exception):
@@ -120,7 +115,3 @@ def validate_zone(info: str, line_num: int) -> str:
     except ValueError:
         raise ZoneTypeNotExistError(line_num, info)
     return zone
-
-
-
-

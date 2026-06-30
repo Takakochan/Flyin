@@ -102,7 +102,7 @@ class CBSSolver:
         """
         self.graph = graph
 
-    def solve(self) -> Paths | None:
+    def solve(self, capacity_info: bool = False) -> Paths | None:
         """Run high-level CBS to find conflict-free paths for all drones.
 
         Builds a root node with an independent A* path per drone, then expands
@@ -143,6 +143,8 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
                 tl = to_timeline(node.paths)
+                if capacity_info:
+                    self._print_capacity_info(tl)
                 PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths  # 衝突なし → 解
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
@@ -312,6 +314,25 @@ class CBSSolver:
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
+
+    def _print_capacity_info(self, tl: TimeLine) -> None:
+        """Print per-turn zone capacity usage to stdout.
+
+        Args:
+            tl: The timeline produced by :func:`to_timeline`.
+        """
+        for t in range(1, len(tl.turns)):
+            print(f"===Turn {t}===")
+            zone_count: dict[str, int] = {}
+            for event in tl.turns[t]:
+                state = tl.get_state(t, event.drone)
+                name = state.location
+                if state.status == "connection":
+                    name = name[name.find("-") + 1:]
+                zone_count[name] = zone_count.get(name, 0) + 1
+            for zone_name, counting in sorted(zone_count.items()):
+                cap = self.graph.zones[zone_name].max_drones
+                print(f"   Zone {zone_name}: {counting}/{cap} drones")
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
         """Build the constraint for the second drone of a conflict.
@@ -494,18 +515,6 @@ def h_step_score(graph: Graph, goal: Zone) -> dict[str, int]:
                 dist[prev] = dist[current] + 1
                 queue.append(prev)
     return dist
-
-
-def to_timeline(paths: Paths) -> TimeLine:
-    max_t = max(len(p) for p in paths.values())
-    tl = TimeLine()
-    for t in range(max_t):
-        events = []
-        for drone_id, path in paths.items():
-            zone = path[t] if t < len(path) else path[-1]
-            events.append(MoveEvent(drone_id, zone))
-        tl.add_turn(events)
-    return tl
 
 
 class PriorityQueue:
