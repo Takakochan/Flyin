@@ -49,7 +49,7 @@ class ParseState:
     """
     zones: list[dict[str, Any]]
     zone_names: set[str]
-    connections: dict[tuple[str, str], dict[str, Any]]
+    connections: dict[str, dict[str, Any]]
     connection_seen: set[frozenset[str]]
     nb_drones: int | None
 
@@ -301,7 +301,7 @@ def parser(file_path: str) -> Graph:
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
         connections={
-            key: Connection(**cnc) for key, cnc in state.connections.items()
+            key: Connection(name=key, **cnc) for key, cnc in state.connections.items()
         },
         nb_drone=state.nb_drones,
     )
@@ -361,9 +361,9 @@ def handle_connection(
             line_num, connection_name, "Duplicated connection name"
         )
     state.connection_seen.add(pair)
-    state.connections[
-        (fetched.data[ConfigKeyWords.ORIGIN], fetched.data[ConfigKeyWords.TO])
-    ] = fetched.data
+    origin = fetched.data[ConfigKeyWords.ORIGIN]
+    to = fetched.data[ConfigKeyWords.TO]
+    state.connections[f"{origin}-{to}"] = fetched.data
 
 
 def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
