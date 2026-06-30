@@ -416,7 +416,7 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     if len(words) != 2:
         raise FormatError(
             line_num,
-            "the for mat is expected:: 'nb_drones: <positive number>'"
+            "the format is expected:: 'nb_drones: <positive number>'"
         )
     try:
         nb_drones = int(words[1])
@@ -493,7 +493,7 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 
 
 def _get_attribute(
-        atrbt: str, line_num: int, state: ParseState
+        atrbt: str, line_num: int, state: ParseState | None = None
 ) -> dict[str, Any]:
     """Parse the bracketed attribute section of a hub line.
 
@@ -533,7 +533,7 @@ def _get_attribute(
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeError(line_num, "")
+            raise HubAttributeDuplicatesError(line_num, "")
         update = export_data(word, line_num, state)
         attribute_dict.update(update.data)
     return attribute_dict
