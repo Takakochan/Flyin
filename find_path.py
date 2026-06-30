@@ -143,8 +143,8 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
                 tl = to_timeline(node.paths)
-                if capacity_info:
-                    self._print_capacity_info(tl)
+
+                self._print_capacity_info(tl)
                 PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths  # 衝突なし → 解
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
