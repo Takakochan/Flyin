@@ -169,12 +169,14 @@ Compared with textual output alone, the interactive map offers a faster and more
 The visualization is particularly useful for demonstrating how conflicts are resolved and how drones dynamically adapt their routes to reach the destination safely.
 
 
-### requirment
-inquirer
-pydantic
-plotly
+### Requirment
+inquirer,
+pydantic,
+plotly,
+pyfiglet,
+termcolor
 
-### technical choices
+### Technical choices
 Plotly visualization
 
 ### Resources
@@ -182,8 +184,7 @@ Plotly visualization
 
 [Plotly example](https://data-analytics.fun/2021/06/12/plotly-line-scatter-details/)
 
-AI usage
-Considered edge cases
-Test idea
-English writing
-checking about my own perception
+### AI usage
+Edge cases,
+Test idea,
+English writing especially docstring.
