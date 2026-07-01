@@ -51,7 +51,7 @@ class ParseState:
     zone_names: set[str]
     connections: dict[tuple[str, str], dict[str, Any]]
     connection_seen: set[frozenset[str]]
-    nb_drones: int | None
+    nb_drones: int
 
 
 @dataclass
@@ -92,7 +92,7 @@ class HubAttributeError(ParserError):
 
     def __str__(self) -> str:
         return (
-            f"Line {self.line_num}: {self.details} Expected atributes "
+            f"Line {self.line_num}: {self.details} Expected atributes"
             "ex) [zone=restricted color=maroon max_drones=2]"
         )
 
@@ -141,7 +141,7 @@ class UnknownKeyError(ParserError):
     keyword: str
 
     def __str__(self) -> str:
-        return f"Line {self.line_num}: Unknown keyword '{self.keyword}'"
+        return f"Line {self.line_num}: Unknown keyword '{self.keyword}"
 
 
 @dataclass
@@ -271,7 +271,7 @@ def parser(file_path: str) -> Graph:
         zone_names=set(),
         connections={},
         connection_seen=set(),
-        nb_drones=None,
+        nb_drones=0,
     )
     try:
         with open(file_path, "r") as f:
@@ -416,7 +416,7 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     if len(words) != 2:
         raise FormatError(
             line_num,
-            "the format is expected: 'nb_drones: <positive number>'"
+            "the format is expected:: 'nb_drones: <positive number>'"
         )
     try:
         nb_drones = int(words[1])
@@ -476,7 +476,7 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
         y = int(hubs[3])
     except ValueError:
         raise ValueRangeError(
-            line_num, "position", "x and y must be integers"
+            line_num, "nb_drones", "should be a positive integer"
         )
     attribute_dict = _get_attribute(attrb, line_num, state)
     return ParseUpdate(
@@ -533,7 +533,7 @@ def _get_attribute(
         elif word.startswith("max_drones"):
             a_drone += 1
         if any(i >= 2 for i in [a_drone, a_color, a_zone]):
-            raise HubAttributeDuplicatesError(line_num, "Duplicate attribute.")
+            raise HubAttributeDuplicatesError(line_num, "")
         update = export_data(word, line_num, state)
         attribute_dict.update(update.data)
     return attribute_dict
@@ -614,7 +614,7 @@ def _get_max_drone_nb(
         raise ValueRangeError(
             line_num, "max_drones", "should be positive integer"
         )
-    if nb_drones <= 0:
+    if nb_drones < 0:
         raise ValueRangeError(
             line_num, "max_drones", "should be positive integer"
         )

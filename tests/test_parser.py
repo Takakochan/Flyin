@@ -55,9 +55,9 @@ class TestGetAttribute(unittest.TestCase):
 
     # --- 異常系: 値の範囲 ---
 
-    def test_max_drones_zero_raises(self) -> None:
-        with self.assertRaises(ValueRangeError):
-            _get_attribute("max_drones=0]", line_num=3)
+    def test_max_drones_zero_allowed(self) -> None:
+        result = _get_attribute("max_drones=0]", line_num=3)
+        self.assertEqual(result, {"max_drones": 0})
 
     def test_max_drones_negative_raises(self) -> None:
         with self.assertRaises(ValueRangeError):
