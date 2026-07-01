@@ -314,33 +314,15 @@ class CBSSolver:
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
-
-    # def _print_capacity_info(self, tl: TimeLine) -> None:
-    #     """Print per-turn zone and connection capacity usage to stdout.
-
-    #     Args:
-    #         tl: The timeline produced by :func:`to_timeline`.
-    #     """
-    #     for t in range(1, len(tl.turns)):
-    #         print(f"===Turn {t}===")
-    #         zone_count: Counter[str] = Counter()
-    #         conn_count: Counter[str] = Counter()
-    #         for event in tl.turns[t]:
-    #             state = tl.get_state(t, event.drone)
-    #             if state.status == "connection":
-    #                 conn_count[state.location] += 1
-    #             else:
-    #                 zone_count[state.location] += 1
-    #         for zone_name, n in zone_count.items():
-    #             print(f"   Zone {zone_name}: {n}/{self.graph.zones[zone_name].max_drones} drones")
-    #         for loc, n in sorted(conn_count.items()):
-    #             conn = self.graph.connections.get(loc)
-    #             cap_c = conn.max_link_capacity if conn else "?"
-    #             print(f"   Connection {loc}: {n}/{cap_c} capacity used")
-
+    
     def _print_capacity_info(self, tl: TimeLine) -> None:
+        """Print per-turn zone and connection capacity usage to stdout.
+
+        Args:
+            tl: The timeline produced by :func:`to_timeline`.
+        """
         for t in range(1, len(tl.turns)):
-            print(f"=====Turn {t}========")
+            print(f"===Turn {t}===")
             zone_count: Counter[str] = Counter()
             conn_count: Counter[str] = Counter()
             for event in tl.turns[t]:
@@ -349,13 +331,11 @@ class CBSSolver:
                     conn_count[state.location] += 1
                 else:
                     zone_count[state.location] += 1
-            for loc, num in zone_count.items():
-                print(f"Zone {loc}: {num}/{self.graph.zones[loc].max_drones} drones")
-            for loc, num in conn_count.items():
-                cap = self.graph.connections[loc].max_link_capacity
-                print(f"Connection {loc}: {num}/{cap} drones")
-
-
+            for zone_name, n in zone_count.items():
+                print(f"   Zone {zone_name}: {n}/{self.graph.zones[zone_name].max_drones} drones")
+            for loc, n in sorted(conn_count.items()):
+                cap_c = self.graph.connections[loc].max_link_capacity
+                print(f"   Connection {loc}: {n}/{cap_c} capacity used")
 
 
 
