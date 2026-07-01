@@ -267,9 +267,9 @@ class CBSSolver:
                 if "-" in prev or "-" in curr or prev == curr:
                     continue
                 key: tuple[str, str, int] | None = None
-                if (prev, curr) in self.graph.connections:
+                if f"{curr}-{prev}" in self.graph.connections:
                     key = (prev, curr, t)
-                elif (curr, prev) in self.graph.connections:
+                elif f"{curr}-{prev}" in self.graph.connections:
                     key = (curr, prev, t)
                 if key is not None:
                     conn_table.setdefault(key, []).append(drone_id)
@@ -306,9 +306,10 @@ class CBSSolver:
             if max_drons < len(dron_ids):
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         for (origin, to, t), dron_ids in self._set_con_ocpancy(paths).items():
-            conn = self.graph.connections.get(
-                (origin, to)
-            ) or self.graph.connections.get((to, origin))
+            conn = (
+                self.graph.connections.get(f"{origin}-{to}")
+                or self.graph.connections.get(f"{to}-{origin}")
+            )
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
@@ -412,7 +413,7 @@ def a_star(
             if next_zone.zone_type == ZoneType._BLOCKED:
                 continue
             next_time_step = time_step + 1
-            conn = graph.connections.get((current.name, next_zone_name))
+            conn = graph.connections.get(f"{current.name}-{next_zone_name}")
             restrict = 1 if conn and conn.extra_step else 0
             priority = -0.1 if next_zone.zone_type == ZoneType.PRIORITY else 0
             extra_time = next_time_step + restrict
