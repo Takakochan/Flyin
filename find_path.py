@@ -315,14 +315,32 @@ class CBSSolver:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
 
-    def _print_capacity_info(self, tl: TimeLine) -> None:
-        """Print per-turn zone and connection capacity usage to stdout.
+    # def _print_capacity_info(self, tl: TimeLine) -> None:
+    #     """Print per-turn zone and connection capacity usage to stdout.
 
-        Args:
-            tl: The timeline produced by :func:`to_timeline`.
-        """
+    #     Args:
+    #         tl: The timeline produced by :func:`to_timeline`.
+    #     """
+    #     for t in range(1, len(tl.turns)):
+    #         print(f"===Turn {t}===")
+    #         zone_count: Counter[str] = Counter()
+    #         conn_count: Counter[str] = Counter()
+    #         for event in tl.turns[t]:
+    #             state = tl.get_state(t, event.drone)
+    #             if state.status == "connection":
+    #                 conn_count[state.location] += 1
+    #             else:
+    #                 zone_count[state.location] += 1
+    #         for zone_name, n in zone_count.items():
+    #             print(f"   Zone {zone_name}: {n}/{self.graph.zones[zone_name].max_drones} drones")
+    #         for loc, n in sorted(conn_count.items()):
+    #             conn = self.graph.connections.get(loc)
+    #             cap_c = conn.max_link_capacity if conn else "?"
+    #             print(f"   Connection {loc}: {n}/{cap_c} capacity used")
+
+    def _print_capacity_info(self, tl: TimeLine) -> None:
         for t in range(1, len(tl.turns)):
-            print(f"===Turn {t}===")
+            print(f"=====Turn {t}========")
             zone_count: Counter[str] = Counter()
             conn_count: Counter[str] = Counter()
             for event in tl.turns[t]:
@@ -331,33 +349,13 @@ class CBSSolver:
                     conn_count[state.location] += 1
                 else:
                     zone_count[state.location] += 1
-            for zone_name, n in zone_count.items():
-                print(f"   Zone {zone_name}: {n}/{self.graph.zones[zone_name].max_drones} drones")
-            for loc, n in sorted(conn_count.items()):
-                # o, d = loc.split("-", 1)
-                conn = self.graph.connections.get(loc) or self.graph.connections.get(f"{loc}")
-                cap_c = conn.max_link_capacity if conn else "?"
-                print(f"   Connection {loc}: {n}/{cap_c} capacity used")
+            for loc, num in zone_count.items():
+                print(f"Zone {loc}: {num}/{self.graph.zones[loc].max_drones} drones")
+            for loc, num in conn_count.items():
+                cap = self.graph.connections[loc].max_link_capacity
+                print(f"Connection {loc}: {num}/{cap} drones")
 
-    # def _print_capacity_info(self, paths: Paths) -> None:
-    #     max_t = max(len(path) for path in paths.values())
-    #     occupance = self._set_occupance_table(paths)
-    #     conn_occ = self._set_con_ocpancy(paths)
 
-    #     for t in range(1, max_t):
-    #         print(f"===== Turn {t}======")
-    #         for (zone_name, time_step), drone_ids in sorted(occupance.items()):
-    #             if time_step != t:
-    #                 continue
-    #             cap = self.graph.zones[zone_name].max_drones
-    #             print(f" Zone { zone_name}: {len(drone_ids)}/{cap} drones")
-
-    #         for (origin, to, time_step), drone_ids in sorted(conn_occ.items()):
-    #             if time_step != t:
-    #                 continue
-    #             conn = self.graph.connections.get((origin, to)) or self.graph.connections.get((to, origin))
-    #             cap_c = conn.max_link_capacity if conn else "?"
-    #             print(f"  Connection {origin}-{to}: {len(drone_ids)}/{cap_c} capacity used")
 
 
 
@@ -499,13 +497,11 @@ def a_star(
 
         zone = graph.zones[current_state_name]
         if zone.zone_type == ZoneType.RESTRICTED:
-            pre = path[-1]
-            if "-" in pre:
-                pre = pre[: pre.rfind("-")]
-            extra = f"{pre}-{current_state[0]}"
+            prev_state = came_from[current_state]
+            extra = f"{prev_state[0]}-{current_state[0]}"
             path.append(current_state[0])
             path.append(extra)
-            current_state = came_from[current_state]
+            current_state = prev_state
 
         else:
             path.append(current_state[0])

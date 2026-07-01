@@ -31,3 +31,26 @@ find_path.py
 ---
 draw_map.py
 - 変更なし（name 変数がタプルから文字列になったが edges.append(name) での用途はそのまま）
+
+原因: 後ろ向きトレース中に pre = path[-1] を使っているので、R の次のゾーン（forward では後ろ）が入ってしまいます。正しくは came_from[current_state]（forward での手前のゾーン）を使うべきです。
+
+● Update(find_path.py)
+Added 3 lines, removed 5 lines
+
+        zone = graph.zones[current_state_name]
+        if zone.zone_type == ZoneType.RESTRICTED:
+            pre = path[-1]
+            if "-" in pre:
+                pre = pre[: pre.rfind("-")]
+            extra = f"{pre}-{current_state[0]}"
+            prev_state = came_from[current_state]
+            extra = f"{prev_state[0]}-{current_state[0]}"
+            path.append(current_state[0])
+            path.append(extra)
+            current_state = came_from[current_state]
+            current_state = prev_state
+
+        else:
+            path.append(current_state[0])
+
+これで "overflow_hell1" に入る前のゾーン名が pre になるので、"A-overflow_hell1" という正しい名前になります。あわせて表示側のフォールバック逆引きも不要になります。
