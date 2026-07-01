@@ -8,5 +8,5 @@ wheels/
 .mypy_cache/
 # Virtual environments
 .venv
-
+maps
 Drone_paths.txt
