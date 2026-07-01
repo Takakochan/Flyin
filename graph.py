@@ -50,7 +50,7 @@ class Graph(BaseModel):
             :meth:`make_adjencency`.
     """
     zones: dict[str, Zone]
-    connections: dict[tuple[str, str], Connection]
+    connections: dict[str, Connection]
     nb_drone: int = 0
     adjacency: dict[str, list[str]] = {}
 
@@ -96,8 +96,8 @@ class Graph(BaseModel):
         for _, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
                 conne = next(
-                    (c for (_, to), c in self.connections.items()
-                     if to == zone.name),
+                    (c for c in self.connections.values()
+                     if c.to == zone.name),
                     None
                 )
                 if conne is not None:
