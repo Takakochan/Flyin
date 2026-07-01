@@ -1,6 +1,6 @@
 import heapq
 import time
-from collections import deque, Counter
+from collections import deque
 from itertools import count
 from dataclasses import dataclass
 
@@ -143,7 +143,6 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
                 tl = to_timeline(node.paths)
-                self.print_capacity_info(tl)
                 PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths  # 衝突なし → 解
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
@@ -211,7 +210,6 @@ class CBSSolver:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
         tl = to_timeline(paths)
-        self.print_capacity_info(tl)
         PlotlyVisualizer.draw(self.graph, tl)
         return paths
 
@@ -331,22 +329,6 @@ class CBSSolver:
         )
         return {constraint_b}
 
-    def print_capacity_info(self, tl: TimeLine) -> None:
-        for t in range(len(tl.turns)):
-            print(f"========Turn {t}============")
-            zone_count: Counter[str] = Counter()
-            conn_count: Counter[str] = Counter()
-            for event in tl.turns[t]:
-                state = tl.get_state(t, event.drone)
-                if state.status == "connection":
-                    conn_count[state.location] += 1
-                else:
-                    zone_count[state.location] += 1
-            for loc, num in zone_count.items():
-                print(f"Zone {loc}: {num}/{self.graph.zones[loc].max_drones}")
-            for loc, num in conn_count.items():
-                cap =self.graph.connections[loc].max_link_capacity
-                print(f"Connection {loc}: {num}/{cap}")
 
 def to_timeline(paths: Paths) -> TimeLine:
     """Convert per-drone paths into a turn-by-turn :class:`TimeLine`.
@@ -369,8 +351,6 @@ def to_timeline(paths: Paths) -> TimeLine:
             events.append(MoveEvent(drone_id, zone))
         tl.add_turn(events)
     return tl
-
-
 
 
 def a_star(
