@@ -314,7 +314,7 @@ class CBSSolver:
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
-    
+
     def _print_capacity_info(self, tl: TimeLine) -> None:
         """Print per-turn zone and connection capacity usage to stdout.
 
