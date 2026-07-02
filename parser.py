@@ -250,7 +250,8 @@ def parser(file_path: str) -> Graph:
 
     Reads the file line by line, skipping blank lines and ``#`` comments,
     dispatches each line to its exporter, and accumulates zones, connections
-    and the drone count. Start and end zones inherit ``nb_drones`` as their
+    and the drone count. Start and end zones inherit ``
+    s`` as their
     ``max_drones`` before the graph is built.
 
     Args:
