@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-Fly_in.pdf
-=======
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -11,9 +8,5 @@ wheels/
 .mypy_cache/
 # Virtual environments
 .venv
-<<<<<<< HEAD
->>>>>>> ab84996377440b6c08459380ed8df1d450a126aa
-=======
-
+maps
 Drone_paths.txt
->>>>>>> c6ee74bdb749b468c9c3a660a4db7b12bc5163fb

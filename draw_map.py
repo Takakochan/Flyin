@@ -165,7 +165,7 @@ class PlotlyVisualizer:
                 ``Drone_paths.txt``.
             """
             x, y, hover, labels, zone_names = [], [], [], [], []
-            for event in sorted(tl.turns[t], key=lambda e: e.drone):
+            for event in sorted(tl.turns[t], key=lambda e: e.drone, reverse=True):
                 drone_id = event.drone
                 state = tl.get_state(t, drone_id)
                 zone_name = state.location
@@ -195,7 +195,7 @@ class PlotlyVisualizer:
 
             if t >= 1:
                 output_parts = []
-                for event in sorted(tl.turns[t], key=lambda e: e.drone):
+                for event in sorted(tl.turns[t], key=lambda e: e.drone, reverse=True):
                     drone_id = event.drone
                     curr = tl.get_state(t, drone_id).location
                     prev = tl.get_state(t - 1, drone_id).location

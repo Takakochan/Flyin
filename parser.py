@@ -42,7 +42,7 @@ class ParseState:
     Attributes:
         zones: Parsed zone definitions, each stored as a keyword-to-value dict.
         zone_names: Names of zones already seen, used to detect duplicates.
-        connections: Parsed connections keyed by their ``(origin, to)`` pair.
+        connections: Parsed connections keyed by their name as given.
         connection_seen: Unordered zone pairs already connected, used to detect
                         duplicate connections regardless of direction.
         nb_drones: Number of drones declared by the ``nb_drones`` line.
@@ -250,7 +250,8 @@ def parser(file_path: str) -> Graph:
 
     Reads the file line by line, skipping blank lines and ``#`` comments,
     dispatches each line to its exporter, and accumulates zones, connections
-    and the drone count. Start and end zones inherit ``nb_drones`` as their
+    and the drone count. Start and end zones inherit ``
+    s`` as their
     ``max_drones`` before the graph is built.
 
     Args:
@@ -301,7 +302,8 @@ def parser(file_path: str) -> Graph:
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
         connections={
-            key: Connection(name=key, **cnc) for key, cnc in state.connections.items()
+            key: Connection(name=key, **cnc)
+            for key, cnc in state.connections.items()
         },
         nb_drone=state.nb_drones,
     )

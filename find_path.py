@@ -1,6 +1,6 @@
 import heapq
 import time
-from collections import Counter, deque
+from collections import deque
 from itertools import count
 from dataclasses import dataclass
 
@@ -102,7 +102,7 @@ class CBSSolver:
         """
         self.graph = graph
 
-    def solve(self, capacity_info: bool = False) -> Paths | None:
+    def solve(self) -> Paths | None:
         """Run high-level CBS to find conflict-free paths for all drones.
 
         Builds a root node with an independent A* path per drone, then expands
@@ -143,8 +143,8 @@ class CBSSolver:
             conflict = self.conflict_detector(occupance_table, node.paths)
             if conflict is None:
                 tl = to_timeline(node.paths)
-                # if capacity_info:
-                self._print_capacity_info(tl)
+                if len(tl.turns) == 0:
+                    raise PathNotFoundError()
                 PlotlyVisualizer.draw(self.graph, tl)
                 return node.paths  # 衝突なし → 解
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
@@ -212,7 +212,6 @@ class CBSSolver:
                 raise ValueError(f"No path for drone {drone_id}")
             paths[drone_id] = path
         tl = to_timeline(paths)
-        self._print_capacity_info(tl)
         PlotlyVisualizer.draw(self.graph, tl)
         return paths
 
@@ -309,35 +308,13 @@ class CBSSolver:
             if max_drons < len(dron_ids):
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         for (origin, to, t), dron_ids in self._set_con_ocpancy(paths).items():
-            conn = (self.graph.connections.get(f"{origin}-{to}")
-                    or self.graph.connections.get(f"{to}-{origin}"))
+            conn = (
+                self.graph.connections.get(f"{origin}-{to}")
+                or self.graph.connections.get(f"{to}-{origin}")
+            )
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
-
-    def _print_capacity_info(self, tl: TimeLine) -> None:
-        """Print per-turn zone and connection capacity usage to stdout.
-
-        Args:
-            tl: The timeline produced by :func:`to_timeline`.
-        """
-        for t in range(1, len(tl.turns)):
-            print(f"===Turn {t}===")
-            zone_count: Counter[str] = Counter()
-            conn_count: Counter[str] = Counter()
-            for event in tl.turns[t]:
-                state = tl.get_state(t, event.drone)
-                if state.status == "connection":
-                    conn_count[state.location] += 1
-                else:
-                    zone_count[state.location] += 1
-            for zone_name, n in zone_count.items():
-                print(f"   Zone {zone_name}: {n}/{self.graph.zones[zone_name].max_drones} drones")
-            for loc, n in sorted(conn_count.items()):
-                cap_c = self.graph.connections[loc].max_link_capacity
-                print(f"   Connection {loc}: {n}/{cap_c} capacity used")
-
-
 
     def constraint_generator(self, conflict: Conflict) -> set[Constraint]:
         """Build the constraint for the second drone of a conflict.
