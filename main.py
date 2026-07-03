@@ -10,8 +10,8 @@ from find_path import PathNotFoundError
 
 def main() -> None:
     format_txt_file()
-    F = Figlet(font='banner3-D')
-    print(colored(F.renderText("Fly-in"), 'cyan'))
+    F = Figlet(font="banner3-D")
+    print(colored(F.renderText("Fly-in"), "cyan"))
     file = select_file()
     graph = parser(file)
     solver = CBSSolver(graph)
@@ -31,10 +31,5 @@ if __name__ == "__main__":
     try:
         main()
         print("Program succesfully finished!!")
-    except (
-        ParserError,
-        GraphValidationError,
-        ValueError,
-        PathNotFoundError
-    ) as e:
+    except (ParserError, GraphValidationError, ValueError, PathNotFoundError) as e:
         print(f" ParserError: {e}")

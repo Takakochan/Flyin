@@ -12,6 +12,7 @@ class DroneState:
         status: Whether the drone is in a zone,
         on a connection, or at the goal.
     """
+
     id: int
     location: str
     status: Literal["zone", "connection", "goal"]
@@ -25,6 +26,7 @@ class MoveEvent:
         drone: Identifier of the drone that moves.
         to: Destination as a zone name or ``origin-to`` connection name.
     """
+
     drone: int
     to: str  # zone|connection
 
@@ -35,6 +37,7 @@ class TimeLine:
     Attributes:
         turns: Move events per time step, indexed by turn number.
     """
+
     def __init__(self) -> None:
         """Initialize an empty timeline."""
         self.turns: list[list[MoveEvent]] = []
@@ -68,5 +71,6 @@ class TimeLine:
                 return DroneState(
                     id=event.drone,
                     location=event.to,
-                    status="connection" if "-" in event.to else "zone")
+                    status="connection" if "-" in event.to else "zone",
+                )
         raise KeyError(f"drone {drone_id} not found as t = {t}")

@@ -161,6 +161,7 @@ class ColorError(ValueError):
         line_num: 1-based line number where the invalid color appeared.
         value: The offending color string as written in the file.
     """
+
     line_num: int
     value: str
 

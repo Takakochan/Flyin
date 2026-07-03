@@ -11,6 +11,7 @@ class Position(NamedTuple):
         x: Horizontal coordinate.
         y: Vertical coordinate.
     """
+
     x: int
     y: int
 
@@ -43,12 +44,15 @@ class ZoneTypeNotExistError(ValueError):
         line_num: 1-based line number where the invalid type appeared.
         value: The offending zone type string.
     """
+
     line_num: int
     value: str
 
     def __str__(self) -> str:
-        return (f"Line {self.line_num} invalid zone_type {self.value} "
-                f"valid Type are ['restricted', 'priority']")
+        return (
+            f"Line {self.line_num} invalid zone_type {self.value} "
+            f"valid Type are ['restricted', 'priority']"
+        )
 
 
 class ZoneType(StrEnum):
@@ -58,14 +62,16 @@ class ZoneType(StrEnum):
     ``_BLOCKED`` marks zones drones may not enter. ``RESTRICTED`` and
     ``PRIORITY`` are the user-specifiable types.
     """
-    _NORMAL = auto()
-    _BLOCKED = auto()
+
+    NORMAL = auto()
+    BLOCKED = auto()
     RESTRICTED = auto()
     PRIORITY = auto()
 
 
 class ZoneRole(StrEnum):
     """Role of a zone within the route: start, intermediate hub, or end."""
+
     START = auto()
     HUB = auto()
     END = auto()
@@ -82,16 +88,18 @@ class Zone(BaseModel):
         color: Optional display color name.
         max_drones: Maximum drones allowed at once. Defaults to 1, minimum 0.
     """
+
     zone_role: ZoneRole = ZoneRole.HUB
     name: str
     position: Position
-    zone_type: ZoneType = ZoneType._NORMAL
+    zone_type: ZoneType = ZoneType.NORMAL
     color: str | None = None
     max_drones: int = Field(default=1, ge=0)
 
 
 class ZoneState(Enum):
     """Runtime occupancy state of a zone."""
+
     AVAILABLE = auto()
     OCCUPIED = auto()
 

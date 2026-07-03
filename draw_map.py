@@ -7,6 +7,7 @@ from time_line import TimeLine
 
 class PlotlyVisualizer:
     """Render a map graph and an animated drone timeline with Plotly."""
+
     @staticmethod
     def draw(graph: Graph, tl: TimeLine) -> None:
         """Build and display an animated Plotly figure of the solved map.
@@ -72,8 +73,7 @@ class PlotlyVisualizer:
             to = graph.zones[connection.to]
             mid_x.append((origin.position.x + to.position.x) / 2)
             mid_y.append((origin.position.y + to.position.y) / 2)
-            mid_hover.append(f"max_link_capacity: "
-                             f"{connection.max_link_capacity}")
+            mid_hover.append(f"max_link_capacity: {connection.max_link_capacity}")
             edges.append(name)
 
         fig.add_trace(
@@ -110,8 +110,7 @@ class PlotlyVisualizer:
                             showlegend=False,
                             textposition="top center",
                             texttemplate=z_name,
-                            hovertext=(f"{zone.name}<br>max_drones: "
-                                       f"{zone.max_drones}"),
+                            hovertext=(f"{zone.name}<br>max_drones: {zone.max_drones}"),
                             hoverinfo="text",
                         )
                     )
@@ -144,6 +143,7 @@ class PlotlyVisualizer:
         Zone {zone_name}: 0/2 drones
         Connection {zone_name}-{prev_name}: 0/1 used
         """
+
         def _drone_scatter(t: int) -> go.Scatter:
             """Build the drone marker trace for a single timeline turn.
 
@@ -170,14 +170,14 @@ class PlotlyVisualizer:
                 state = tl.get_state(t, drone_id)
                 zone_name = state.location
                 if state.status == "connection":
-                    zone_name = zone_name[zone_name.find("-") + 1:]
+                    zone_name = zone_name[zone_name.find("-") + 1 :]
                 zone = graph.zones[zone_name]
                 if zone.zone_type == ZoneType.RESTRICTED:
                     if t > 0:
                         prev_state = tl.get_state(t - 1, drone_id)
                         prev_name = prev_state.location
                         if prev_state.status == "connection":
-                            prev_name = prev_name[prev_name.find("-") + 1:]
+                            prev_name = prev_name[prev_name.find("-") + 1 :]
                     else:
                         prev_name = zone_name
                     previous_zone = graph.zones[prev_name]
@@ -188,8 +188,7 @@ class PlotlyVisualizer:
                 else:
                     x.append(zone.position.x)
                     y.append(zone.position.y)
-                hover.append(f"Drone {drone_id + 1}"
-                             f"<br>Zone: {zone_name}<br>t={t}")
+                hover.append(f"Drone {drone_id + 1}<br>Zone: {zone_name}<br>t={t}")
                 zone_names.append(zone_name)
                 labels.append(f"D{drone_id + 1}")
 
@@ -223,9 +222,7 @@ class PlotlyVisualizer:
 
         fig.add_trace(_drone_scatter(0))
         fig.frames = [
-            go.Frame(data=[_drone_scatter(t)],
-                     name=str(t),
-                     traces=[drone_trace_idx])
+            go.Frame(data=[_drone_scatter(t)], name=str(t), traces=[drone_trace_idx])
             for t in range(max_t)
         ]
 

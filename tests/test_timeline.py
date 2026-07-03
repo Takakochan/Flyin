@@ -5,12 +5,8 @@ from find_path import to_timeline
 
 def test_get_state_zone() -> None:
     tl = TimeLine()
-    tl.add_turn([
-        MoveEvent(drone=0, to="zoneA"), MoveEvent(drone=1, to="zoneB")
-    ])
-    assert tl.get_state(0, 0) == DroneState(
-        id=0, location="zoneA", status="zone"
-    )
+    tl.add_turn([MoveEvent(drone=0, to="zoneA"), MoveEvent(drone=1, to="zoneB")])
+    assert tl.get_state(0, 0) == DroneState(id=0, location="zoneA", status="zone")
 
 
 def test_get_state_connection() -> None:
