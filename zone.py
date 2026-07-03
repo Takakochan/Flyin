@@ -58,8 +58,8 @@ class ZoneType(StrEnum):
     ``_BLOCKED`` marks zones drones may not enter. ``RESTRICTED`` and
     ``PRIORITY`` are the user-specifiable types.
     """
-    _NORMAL = auto()
-    _BLOCKED = auto()
+    NORMAL = auto()
+    BLOCKED = auto()
     RESTRICTED = auto()
     PRIORITY = auto()
 
@@ -86,7 +86,7 @@ class Zone(BaseModel):
     zone_role: ZoneRole = ZoneRole.HUB
     name: str
     position: Position
-    zone_type: ZoneType = ZoneType._NORMAL
+    zone_type: ZoneType = ZoneType.NORMAL
     color: str | None = None
     max_drones: int = Field(default=1, ge=0)
 

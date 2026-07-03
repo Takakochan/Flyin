@@ -412,7 +412,7 @@ def a_star(
         # Neighbours which are connected from current zone
         for next_zone_name in neighbours:
             next_zone = graph.zones[next_zone_name]
-            if next_zone.zone_type == ZoneType._BLOCKED:
+            if next_zone.zone_type == ZoneType.BLOCKED:
                 continue
             next_time_step = time_step + 1
             conn = graph.connections.get(f"{current.name}-{next_zone_name}")

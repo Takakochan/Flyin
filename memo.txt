@@ -1,56 +1,169 @@
-今セッションの変更一覧
+原因が分かりました。実は「nb_drones が無い場合のエラー」はもう書いてあるのに、初期値のせいで絶対に発動しないデッドコードになっています。
 
----
-connection.py
-- 変更なし（name: str フィールドはもともと存在していた）
+現状の動作
 
----
-graph.py
-- connections の型 dict[tuple[str, str], Connection] → dict[str, Connection]
-- (_, to) タプルアンパック → c.to プロパティ参照に変更
+nb_drones 行をコメントアウトしたマップを実際にパースすると、エラーにならず nb_drone = 0 で通ってしまいます。流れはこうです:
 
----
-parser.py
-- ParseState.connections の型 dict[tuple[str, str], ...] → dict[str, ...]
-- コネクションキー生成 (origin, to) タプル → f"{origin}-{to}" 文字列
-- Connection(**cnc) → Connection(name=key, **cnc)（name を明示的に渡す）
+1. parser.py:275 で ParseState が nb_drones=0 で初期化される
+2. 宣言行が無いので 0 のまま最後まで進む
+3. parser.py:297 のガードは if state.nb_drones is None: — でも値は 0 であって None ではないので、用意した FormatError(None, "nb_drones is missing") は永遠に発動しない
+4. そのまま nb_drone=0 の Graph が作られ、start/end の max_drones も 0 → _zero_drone_case() でブロック扱いになり、最終的にソルバーが空のタイムラインを見て PathNotFoundError という見当違いのエラーが出る
 
----
-find_path.py
-- _print_capacity_info(tl: TimeLine) を全面リファクタリング
-  - strip(loc: str) ヘルパー廃止 → DroneState.status を使う形に
-  - Counter を使ってゾーン・コネクションを1ループで集計
-  - コネクション上のドローンをゾーン集計に誤算入していたバグ修正
-  - state.location をそのままキーに（split 不要）
-  - RESTRICTED ゾーンの逆順 cell 名に対して逆方向フォールバック追加
-- タプルキー参照をすべて f-string に置換
-  - (prev, curr) in connections → f"{prev}-{curr}" in connections
-  - connections.get((origin, to)) → connections.get(f"{origin}-{to}")
-  - connections.get((current.name, next_zone_name)) → connections.get(f"{current.name}-{next_zone_name}")
+つまり nb_drones: 0 と明示した場合は行レベルで ValueRangeError (parser.py:430) が弾いてくれる一方、行ごと欠落のケースだけすり抜けています。
 
----
-draw_map.py
-- 変更なし（name 変数がタプルから文字列になったが edges.append(name) での用途はそのまま）
+直し方
 
-原因: 後ろ向きトレース中に pre = path[-1] を使っているので、R の次のゾーン（forward では後ろ）が入ってしまいます。正しくは came_from[current_state]（forward での手前のゾーン）を使うべきです。
+「未宣言」と「0」を区別できるように、初期値を None にするだけです。既存のガードとエラーメッセージがそのまま生きます。
 
-● Update(find_path.py)
-Added 3 lines, removed 5 lines
+# parser.py:54 (ParseState)
+    nb_drones: int | None        # ← int から変更
 
-        zone = graph.zones[current_state_name]
-        if zone.zone_type == ZoneType.RESTRICTED:
-            pre = path[-1]
-            if "-" in pre:
-                pre = pre[: pre.rfind("-")]
-            extra = f"{pre}-{current_state[0]}"
-            prev_state = came_from[current_state]
-            extra = f"{prev_state[0]}-{current_state[0]}"
-            path.append(current_state[0])
-            path.append(extra)
-            current_state = came_from[current_state]
-            current_state = prev_state
+# parser.py:270-276 (parser 内の初期化)
+    state = ParseState(
+        ...
+        nb_drones=None,          # ← 0 から変更
+    )
 
-        else:
-            path.append(current_state[0])
+これで欠落時は parser.py:298 の FormatError(None, "nb_drones is missing") が投げられ、FormatError.__str__ は line_num=None のとき detail だけ返すので、main.py の except 節が捕まえて
 
-これで "overflow_hell1" に入る前のゾーン名が pre になるので、"A-overflow_hell1" という正しい名前になります。あわせて表示側のフォールバック逆引きも不要になります。
+ FormatError: nb_drones is missing
+
+ときれいに表示されます。トレースバックも出ません。既存のエラー設計(ParserError 階層 + main での一括ハンドリング)にそのまま乗る形なので、新しい例外クラスを作る必要はありません。
+
+一点だけ注意: nb_drones は int | None 型になるので、mypy を通すなら parser.py:299 以降(state.nb_drones を使う箇所)はガードの後ろにあるため実害はありませんが、strict 設定だと narrowing のために assert state.nb_drones is not None を1行足すか、ガードを先に置く今の順序を保つ必要があります(現状の順序なら大丈夫です)。
+
+適用しましょうか？
+
+
+
+
+
+「start_hub がない」ことを検出するコードは実は既にあります — graph.py:117 の StartMissingError("Zone role 'start_hub' is missing")。でもそこまでたどり着けません。
+
+パーサーは1行ずつ処理していて、parser.py:699 の _check_connection_format が接続行を読んだその場で「両端の名前が既出のゾーンにあるか」をチェックします。start_hub: start ... の行を消すと start が state.zone_names に登録されないので、11行目の connection: start-junction を読んだ瞬間に ConnectionFormatError で死にます。ファイル末尾まで読み終わって Graph を構築するときに走るはずの start_hub チェックは、永遠に実行されません。
+
+要するに「症状(接続の名前が解決できない)」が「原因(start_hub 宣言の欠落)」より先に報告されているわけです。
+
+直し方: 名前解決チェックを「読み終わった後」に遅延させる
+
+「接続の端点が宣言済みゾーンか」は行単位で判定する必要がない検査なので、ループの後ろに移し、その前にロールの存在チェックを入れます。検出順序が「原因 → 症状」になります。
+
+1. _check_connection_format から名前チェックを外す(フォーマットチェックだけ残す)
+
+def _check_connection_format(line_num: int, info: str) -> list[str]:
+    infos = info.split("-")
+    if len(infos) != 2:
+        raise ConnectionFormatError(line_num, "Connection format error")
+    return infos          # zone_names の照合はここでやらない
+
+2. 接続の行番号を覚えておく(後でエラーに行番号を出せるように)
+
+ParseState に1フィールド追加し、handle_connection で記録します:
+
+    connection_lines: dict[str, int]      # ParseState に追加
+
+    # handle_connection 内
+    origin = fetched.data[ConfigKeyWords.ORIGIN]
+    to = fetched.data[ConfigKeyWords.TO]
+    key = f"{origin}-{to}"
+    state.connections[key] = fetched.data
+    state.connection_lines[key] = fetched.line_num
+
+3. parser() のループ後に、原因 → 症状の順で検査する
+
+    if state.nb_drones is None:
+        raise FormatError(None, "nb_drones is missing")
+
+    roles = {z.get("zone_role") for z in state.zones}
+    if ZoneRole.START not in roles:
+        raise FormatError(None, "'start_hub' declaration is missing")
+    if ZoneRole.END not in roles:
+        raise FormatError(None, "'end_hub' declaration is missing")
+
+    for key, cnc in state.connections.items():
+        for name in (cnc[ConfigKeyWords.ORIGIN], cnc[ConfigKeyWords.TO]):
+            if name not in state.zone_names:
+                raise ConnectionFormatError(
+                    state.connection_lines[key],
+                    f"unknown zone '{name}' in connection"
+                )
+
+これで4行目を消した場合の出力はこうなります:
+
+ FormatError: 'start_hub' declaration is missing
+
+start_hub はあるのに接続名をタイポした場合は、従来どおり行番号つきの ConnectionFormatError が出ます(しかも「どの名前が未知か」まで言えるようになり、今より親切です)。
+
+補足
+
+- graph.py の StartMissingError は残しておいて構いません。パーサーを通らずに Graph を直接組み立てるケース(テストなど)の安全網になります。専用の例外クラスを作りたければ HubMissingError を ParserError 派生で足してもいいですが、既存の FormatError(None, ...) で十分きれいに出ます。
+- この変更は「ゾーン宣言より前に接続行を書けない」という現在の暗黙の制約も外します(全部読んでから解決するので順序自由になる)。42 の課題仕様的に問題なければ、むしろ堅牢になります。
+
+前回の nb_drones の件(ParseState の初期値を None に)とセットで適用しましょうか？
+
+
+handle_zone の方には name = fetched.data[ConfigKeyWords.NAME] という変数があるのですが(parser.py:327)、handle_connection にはありません。ここで使うべきキーは、1行上の state.connections に使っているのと同じキー f"{origin}-{to}" です。両方の辞書が同じキーで引けることが重要なので、変数に出して揃えるのがきれいです:
+
+    origin = fetched.data[ConfigKeyWords.ORIGIN]
+    to = fetched.data[ConfigKeyWords.TO]
+    key = f"{origin}-{to}"
+    state.connections[key] = fetched.data
+    state.connection_lines[key] = fetched.line_num
+
+こうしておけば、parser() 末尾の検査ループで state.connections.items() から取った key でそのまま行番号が引けます:
+
+    for key, cnc in state.connections.items():
+        ...
+        raise ConnectionFormatError(
+            state.connection_lines[key], ...
+        )
+
+
+あと忘れずに2箇所:
+
+1. ParseState のクラス定義にフィールド追加 — connection_lines: dict[str, int]
+2. parser() 内の ParseState(...) 初期化に connection_lines={} を追加
+
+この2つがないと、今度は AttributeError / TypeError になります。
+
+
+実際に12個の壊れたマップを食わせて確認しました。まず1点報告: あなたが編集途中だった connection_lines のフィールド追加に対し、ParseState(...) を構築している2箇所(parser.py:271 と parser.py:520)に connection_lines={} が渡っておらず全マップが TypeError で落ちる状態だったので、その2行は私が補完済みです。
+
+以下、確認できたエッジケースです。深刻な順に並べます。
+
+クラッシュする(エラーメッセージ以前の問題)
+
+1. 自己ループ接続の重複 → IndexError で素のトレースバック
+connection: mid-mid を2回書くと、parser.py:362 の connection_name = f"{list(pair)[0]}-{list(pair)[1]}" が落ちます。pair は frozenset なので {mid, mid} は要素1個になり、list(pair)[1] が範囲外。DuplicatedConnectionError の代わりに未捕捉の IndexError が出ます。修正は fetched.data から origin/to を直接使うこと。そもそも自己ループ自体を弾くのもアリです。
+
+メッセージが嘘をついている
+
+2. 座標が整数でないと「nb_drones」のエラーが出る
+hub: mid x 0 [...] → Line 3: [nb_drones] should be a positive integer。parser.py:482-484 が nb_drones 用エラーのコピペになっています。フィールド名を "position"、文言を「coordinates must be integers」等に。
+
+3. zone=blocked / zone=normal が素通りする
+validate_zone は ZoneType(info) で照合するので4種全部通ります。一方 zone=foo のエラーは「valid Type are ['restricted', 'priority']」と主張(zone.py:50-51)。メッセージと挙動が矛盾。restricted/priority 以外を明示的に拒否するのが筋だと思います(docstring も NORMAL/BLOCKED は内部用と言っている)。
+
+4. max_drones=-1 は「should be positive integer」だが max_drones=0 は通る
+0 はブロックゾーンとして意図的に許可しているので、実態は「非負整数」。メッセージを「must be a non-negative integer (0 = blocked)」にすべき。
+
+5. キーワードのタイポで hub のフォーマット例を見せられる
+conection: mid-goal → HubFormatError: ... Expected 'hub: hub-name <int> <int> ...'。接続行のつもりなのに hub の書き方を案内される。実は UnknownKeyError(parser.py:139)がまさにこの用途に定義されているのにどこからも raise されていないデッドコードです。export_data(parser.py:395-400)で exporter is None のとき UnknownKeyError(line_num, title) を投げれば「Unknown keyword 'conection'」と出せます。なお UnknownKeyError.__str__ は閉じクォートが欠けています('{self.keyword} ← parser.py:145)。
+
+エラーを出すべきなのに黙って通る
+
+6. start_hub / end_hub が2つあっても無検出
+_validate_start_end は any() で存在チェックだけ。2個目は黙って無視され(ソルバーは next() で最初の1個を拾う)、ドローンは2個目の start から永遠に出発しません。「exactly one」の検査にすべきです。
+
+7. nb_drones の二重宣言は後勝ちで上書き
+nb_drones: 2 と nb_drones: 99 を両方書くと黙って 99 になります(parser.py:291-292)。重複宣言はエラーにするのが安全。
+
+惜しい・紛らわしい
+
+8. ハイフン入りゾーン名 — hub: mid-point ... の宣言は通るのに、それを参照する接続行は split("-") が3分割になり「Connection format error」。真の原因は名前に - が使えないことなので、宣言時に - を含む名前を ZoneNameError で弾くのが親切。
+
+9. max_link_capacity の重複 — [max_link_capacity=2 max_link_capacity=3] → 「must be an integer」。本当の問題は属性の重複。
+
+10. 属性4個超えのメッセージが空 — HubAttributeError(line_num, "") で detail が空文字のため Line 3:  Expected atributesex) ... と間の抜けた出力に(スペース欠落も)。detail に "too many attributes (max 3)" 等を入れる。ついでに "atributes" → "attributes"、ConnectionFormatError の "Optionl" → "Optional"、main.py の "succesfully" → "successfully" のタイポも。
+
+なお、前回までに話した2件(nb_drones 欠落 = None 初期化の件、start_hub 欠落 = 名前解決チェックの遅延)はまだ未適用です。今回の分と合わせてまとめて適用しましょうか？優先度は 1 → 2 → 6 → 5 の順がおすすめです。

@@ -128,4 +128,4 @@ class Graph(BaseModel):
         """
         for zone in self.zones.values():
             if zone.max_drones == 0:
-                zone.zone_type = ZoneType._BLOCKED
+                zone.zone_type = ZoneType.BLOCKED

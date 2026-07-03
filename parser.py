@@ -52,6 +52,7 @@ class ParseState:
     connections: dict[str, dict[str, Any]]
     connection_seen: set[frozenset[str]]
     nb_drones: int
+    connection_lines: dict[str, int]
 
 
 @dataclass
@@ -273,6 +274,7 @@ def parser(file_path: str) -> Graph:
         connections={},
         connection_seen=set(),
         nb_drones=0,
+        connection_lines={},
     )
     try:
         with open(file_path, "r") as f:
@@ -366,6 +368,7 @@ def handle_connection(
     origin = fetched.data[ConfigKeyWords.ORIGIN]
     to = fetched.data[ConfigKeyWords.TO]
     state.connections[f"{origin}-{to}"] = fetched.data
+    state.connection_lines[f"{origin}-{to}"] = fetched.line_num
 
 
 def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
@@ -517,7 +520,8 @@ def _get_attribute(
     if state is None:
         state = ParseState(
             zones=[], zone_names=set(),
-            connections={}, connection_seen=set(), nb_drones=0
+            connections={}, connection_seen=set(), nb_drones=0,
+            connection_lines={},
         )
     attribute_dict: dict[str, Any] = {}
     a_zone = 0
