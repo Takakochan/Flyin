@@ -21,6 +21,7 @@ class Constraint:
         zone_name: Name of the forbidden zone.
         time_step: Time step at which the zone is forbidden.
     """
+
     dron_id: int
     zone_name: str
     time_step: int
@@ -36,6 +37,7 @@ class Conflict:
         zone_name: Name of the contested zone (or connection endpoint).
         time_step: Time step at which the conflict occurs.
     """
+
     dron_id_a: int
     dron_id_b: int
     zone_name: str
@@ -44,12 +46,14 @@ class Conflict:
 
 class PathError(Exception):
     """Base class for path-finding errors."""
+
     pass
 
 
 @dataclass
 class PathNotFoundError(PathError):
     """Raised when A* cannot find a path within its step budget."""
+
     def __str__(self) -> str:
         return "Path was not found"
 
@@ -62,6 +66,7 @@ class CTNode:
         constraints: The set of constraints in force at this node.
         paths: Current path per drone, keyed by drone id.
     """
+
     constraints: frozenset[Constraint]
     paths: dict[int, list[str]]
 
@@ -94,6 +99,7 @@ class CBSSolver:
     Coordinates per-drone A* searches and resolves inter-drone conflicts by
     branching the constraint tree until a conflict-free set of paths is found.
     """
+
     def __init__(self, graph: Graph) -> None:
         """Store the graph the solver operates on.
 
@@ -120,13 +126,10 @@ class CBSSolver:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
-        goal_zone = next(
-            z for z in self.graph.zones.values() if z.zone_role == "end"
-        )
+        goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
         h_scores = h_step_score(self.graph, goal_zone)
         root_paths = {
-            d: a_star(self.graph, start_zone,
-                      goal_zone, frozenset(), d, h_scores)
+            d: a_star(self.graph, start_zone, goal_zone, frozenset(), d, h_scores)
             for d in range(self.graph.nb_drone)
         }
         """
@@ -149,11 +152,10 @@ class CBSSolver:
                 return node.paths  # 衝突なし → 解
             # 衝突した2機のうち一方だけ制約を追加して子ノードを1つ生成
             for drone_id in (conflict.dron_id_a, conflict.dron_id_b):
-                new_constraints = frozenset(node.constraints | {
-                    Constraint(drone_id,
-                               conflict.zone_name,
-                               conflict.time_step)
-                })
+                new_constraints = frozenset(
+                    node.constraints
+                    | {Constraint(drone_id, conflict.zone_name, conflict.time_step)}
+                )
                 """
                 | は **集合(set)や型の「和(union」**を表している記号
                 """
@@ -191,9 +193,7 @@ class CBSSolver:
         start_zone = next(
             z for z in self.graph.zones.values() if z.zone_role == "start"
         )
-        goal_zone = next(
-            z for z in self.graph.zones.values() if z.zone_role == "end"
-        )
+        goal_zone = next(z for z in self.graph.zones.values() if z.zone_role == "end")
         h_scores = h_step_score(self.graph, goal_zone)
         for drone_id in range(self.graph.nb_drone):
             occupancy = self._set_occupance_table(paths)
@@ -205,8 +205,12 @@ class CBSSolver:
                 if len(occupants) >= zone.max_drones:
                     constraints.add(Constraint(drone_id, zone_name, t))
             path = a_star(
-                self.graph, start_zone, goal_zone,
-                frozenset(constraints), drone_id, h_scores
+                self.graph,
+                start_zone,
+                goal_zone,
+                frozenset(constraints),
+                drone_id,
+                h_scores,
             )
             if not path:
                 raise ValueError(f"No path for drone {drone_id}")
@@ -216,8 +220,7 @@ class CBSSolver:
         return paths
 
     def _set_occupance_table(
-            self,
-            paths: dict[int, list[str]]
+        self, paths: dict[int, list[str]]
     ) -> dict[tuple[str, int], list[int]]:
         """Index which drones occupy each (zone, time) cell.
 
@@ -246,8 +249,7 @@ class CBSSolver:
         return occupance_table
 
     def _set_con_ocpancy(
-            self,
-            paths: dict[int, list[str]]
+        self, paths: dict[int, list[str]]
     ) -> dict[tuple[str, str, int], list[int]]:
         """Index which drones traverse each connection at each time step.
 
@@ -278,9 +280,9 @@ class CBSSolver:
         return conn_table
 
     def conflict_detector(
-            self,
-            occupance_table: dict[tuple[str, int], list[int]],
-            paths: dict[int, list[str]],
+        self,
+        occupance_table: dict[tuple[str, int], list[int]],
+        paths: dict[int, list[str]],
     ) -> Conflict | None:
         """Find the first capacity violation in zones or connections.
 
@@ -308,10 +310,9 @@ class CBSSolver:
             if max_drons < len(dron_ids):
                 return Conflict(dron_ids[0], dron_ids[1], zone_name, time_step)
         for (origin, to, t), dron_ids in self._set_con_ocpancy(paths).items():
-            conn = (
-                self.graph.connections.get(f"{origin}-{to}")
-                or self.graph.connections.get(f"{to}-{origin}")
-            )
+            conn = self.graph.connections.get(
+                f"{origin}-{to}"
+            ) or self.graph.connections.get(f"{to}-{origin}")
             if conn and len(dron_ids) > conn.max_link_capacity:
                 return Conflict(dron_ids[0], dron_ids[1], to, t)
         return None
@@ -395,14 +396,12 @@ def a_star(
     neighbours = []
     visited_set: set[tuple[str, int]] = set()
     constraint_set = {
-        (c.zone_name, c.time_step)
-        for c in constraints if c.dron_id == drone_id
+        (c.zone_name, c.time_step) for c in constraints if c.dron_id == drone_id
     }  # 制約のあるzoneとタイムステップの記録
     open_queue = PriorityQueue()
-    open_queue.push(h_scores.get(start.name, len(graph.zones)),
-                    start, time_step)
+    open_queue.push(h_scores.get(start.name, len(graph.zones)), start, time_step)
     while not open_queue.is_empty():
-        if time_step >= len(graph.zones) * 2:
+        if time_step >= len(graph.zones) * 2 and time_step > graph.nb_drone:
             raise PathNotFoundError()
         current, time_step = open_queue.pop()
         if current == goal:
@@ -427,23 +426,21 @@ def a_star(
             visited_set.add(new_state)
             came_from[new_state] = current_set
 
-            next_f = sum([
-                next_time_step, h_scores.get(next_zone_name, 999),
-                restrict, priority]
+            next_f = sum(
+                [next_time_step, h_scores.get(next_zone_name, 999), restrict, priority]
             )
             open_queue.push(next_f, next_zone, extra_time)
         max_t = len(graph.zones) * graph.nb_drone * 3
         if time_step + 1 < max_t:
             wait_state = (current.name, time_step + 1)
             if (
-                neighbours and wait_state
-                not in constraint_set and wait_state not in visited_set
+                neighbours
+                and wait_state not in constraint_set
+                and wait_state not in visited_set
             ):
                 visited_set.add(wait_state)
                 came_from[wait_state] = current_set
-                wait_f = (time_step + 1) + h_scores.get(
-                    current.name, len(graph.zones)
-                )
+                wait_f = (time_step + 1) + h_scores.get(current.name, len(graph.zones))
                 open_queue.push(wait_f, current, time_step + 1)
     if current != goal:
         return []
@@ -503,6 +500,7 @@ class PriorityQueue:
     A monotonically increasing counter breaks f-score ties so that
     :class:`Zone` objects are never compared directly.
     """
+
     def __init__(self) -> None:
         """Initialize an empty heap and the tie-breaking counter."""
         self._heap: list[tuple[float, int, Zone, int]] = []
@@ -516,13 +514,7 @@ class PriorityQueue:
             zone: The zone associated with this state.
             time_step: The time step associated with this state.
         """
-        heapq.heappush(
-            self._heap,
-            (f_score,
-             next(self._counter),
-             zone,
-             time_step)
-        )
+        heapq.heappush(self._heap, (f_score, next(self._counter), zone, time_step))
 
     def pop(self) -> tuple[Zone, int]:
         """Remove and return the lowest-f-score zone state.

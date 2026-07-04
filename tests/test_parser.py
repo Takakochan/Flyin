@@ -1,12 +1,9 @@
 import unittest
-from parser import (
-    _get_attribute, HubAttributeDuplicatesError, ValueRangeError
-)
+from parser import _get_attribute, HubAttributeDuplicatesError, ValueRangeError
 from zone import ZoneType
 
 
 class TestGetAttribute(unittest.TestCase):
-
     # --- 正常系 ---
 
     def test_color_only(self) -> None:
@@ -26,14 +23,15 @@ class TestGetAttribute(unittest.TestCase):
         self.assertEqual(result, {"color": "yellow", "max_drones": 2})
 
     def test_all_three_attributes(self) -> None:
-        result = _get_attribute(
-            "zone=restricted color=red max_drones=1]", line_num=1
+        result = _get_attribute("zone=restricted color=red max_drones=1]", line_num=1)
+        self.assertEqual(
+            result,
+            {
+                "zone_type": ZoneType.RESTRICTED,
+                "color": "red",
+                "max_drones": 1,
+            },
         )
-        self.assertEqual(result, {
-            "zone_type": ZoneType.RESTRICTED,
-            "color": "red",
-            "max_drones": 1,
-        })
 
     def test_empty_attributes(self) -> None:
         result = _get_attribute("]", line_num=1)

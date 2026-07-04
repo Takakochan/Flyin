@@ -47,12 +47,13 @@ class ParseState:
                         duplicate connections regardless of direction.
         nb_drones: Number of drones declared by the ``nb_drones`` line.
     """
+
     zones: list[dict[str, Any]]
     zone_names: set[str]
     connections: dict[str, dict[str, Any]]
     connection_seen: set[frozenset[str]]
-    nb_drones: int
     connection_lines: dict[str, int]
+    nb_drones: int | None
 
 
 @dataclass
@@ -64,6 +65,7 @@ class ParseUpdate:
         data: Field values extracted from the line.
         line_num: 1-based line number the data was read from.
     """
+
     target: str
     data: dict[str, Any]
     line_num: int
@@ -186,6 +188,7 @@ def register_exporter(key_word: str) -> Callable[[ExportFn], ExportFn]:
         A decorator that registers the function in :data:`EXPORTERS` and
         returns it unchanged.
     """
+
     def decorator(func: ExportFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -208,6 +211,7 @@ def setter_machine(name: ConfigKeyWords) -> Callable[[SetterFn], ExportFn]:
         A decorator that registers the function in :data:`SETTERS` and returns
         it unchanged.
     """
+
     def decorator(func: SetterFn) -> ExportFn:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -273,8 +277,8 @@ def parser(file_path: str) -> Graph:
         zone_names=set(),
         connections={},
         connection_seen=set(),
-        nb_drones=0,
         connection_lines={},
+        nb_drones=None,
     )
     try:
         with open(file_path, "r") as f:
@@ -298,24 +302,31 @@ def parser(file_path: str) -> Graph:
         raise PermissionError(f"Permission denied: {file_path}")
     if state.nb_drones is None:
         raise FormatError(None, "nb_drones is missing")
+    roles = {z.get("zone_role") for z in state.zones}
+    if ZoneRole.START not in roles:
+        raise FormatError(None, "'start_hub' declaration is missing")
+    if ZoneRole.END not in roles:
+        raise FormatError(None, "'end_hub' declaration is missing")
+
+    for key, cnc in state.connections.items():
+        for name in (cnc[ConfigKeyWords.ORIGIN], cnc[ConfigKeyWords.TO]):
+            if name not in state.zone_names:
+                raise ConnectionFormatError(
+                    state.connection_lines[key], f"unknown zone '{name}' in connection"
+                )
     for zone_data in state.zones:
         if zone_data.get("zone_role") in (ZoneRole.START, ZoneRole.END):
             zone_data["max_drones"] = state.nb_drones
     return Graph(
         zones={dat[ConfigKeyWords.NAME]: Zone(**dat) for dat in state.zones},
         connections={
-            key: Connection(name=key, **cnc)
-            for key, cnc in state.connections.items()
+            key: Connection(name=key, **cnc) for key, cnc in state.connections.items()
         },
         nb_drone=state.nb_drones,
     )
 
 
-def handle_zone(
-        state: ParseState,
-        fetched: ParseUpdate,
-        line_num: int
-) -> None:
+def handle_zone(state: ParseState, fetched: ParseUpdate, line_num: int) -> None:
     """Record a parsed zone, rejecting duplicate names.
 
     Args:
@@ -328,18 +339,12 @@ def handle_zone(
     """
     name = fetched.data[ConfigKeyWords.NAME]
     if name in state.zone_names:
-        raise ZoneNameError(
-            line_num, name, "is duplicated"
-        )
+        raise ZoneNameError(line_num, name, "is duplicated")
     state.zone_names.add(name)
     state.zones.append(fetched.data)
 
 
-def handle_connection(
-        state: ParseState,
-        fetched: ParseUpdate,
-        line_num: int
-) -> None:
+def handle_connection(state: ParseState, fetched: ParseUpdate, line_num: int) -> None:
     """Record a parsed connection, rejecting duplicate pairs.
 
     The duplicate check is direction-insensitive, so ``a-b`` and ``b-a`` are
@@ -367,8 +372,9 @@ def handle_connection(
     state.connection_seen.add(pair)
     origin = fetched.data[ConfigKeyWords.ORIGIN]
     to = fetched.data[ConfigKeyWords.TO]
-    state.connections[f"{origin}-{to}"] = fetched.data
-    state.connection_lines[f"{origin}-{to}"] = fetched.line_num
+    key = f"{origin}-{to}"
+    state.connections[key] = fetched.data
+    state.connection_lines[key] = fetched.line_num
 
 
 def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
@@ -394,9 +400,7 @@ def export_data(line: str, line_num: int, state: ParseState) -> ParseUpdate:
             title, _, info = line.partition(sep)
             exporter = EXPORTERS.get(title)
             if exporter is None:
-                raise HubFormatError(
-                    line_num, "unexpected format"
-                )
+                raise HubFormatError(line_num, "unexpected format")
             return exporter(line, line_num, state)
     raise HubFormatError(line_num, "unexpected format")
 
@@ -420,23 +424,17 @@ def _get_nb_drones(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     words = line.split()
     if len(words) != 2:
         raise FormatError(
-            line_num,
-            "the format is expected:: 'nb_drones: <positive number>'"
+            line_num, "the format is expected:: 'nb_drones: <positive number>'"
         )
     try:
         nb_drones = int(words[1])
     except ValueError:
-        raise ValueRangeError(
-            line_num, "nb_drones", "must be a positive integer"
-        )
+        raise ValueRangeError(line_num, "nb_drones", "must be a positive integer")
 
     if nb_drones <= 0:
-        raise ValueRangeError(
-            line_num, "nb_drones", "must be positive"
-        )
+        raise ValueRangeError(line_num, "nb_drones", "must be positive")
     return ParseUpdate(
-        target=ConfigKeyWords.NB_DRONE, data={"nb_drones": nb_drones},
-        line_num=line_num
+        target=ConfigKeyWords.NB_DRONE, data={"nb_drones": nb_drones}, line_num=line_num
     )
 
 
@@ -466,9 +464,7 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
         ValueRangeError: If the coordinates are not integers.
     """
     if "[" not in line and "]" not in line:
-        raise HubFormatError(
-            line_num, "Attribute is not given"
-        )
+        raise HubFormatError(line_num, "Attribute is not given")
     hub, _, attrb = line.partition("[")
     hubs = hub.split()
     if len(hubs) != 4:
@@ -480,9 +476,7 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
         x = int(hubs[2])
         y = int(hubs[3])
     except ValueError:
-        raise ValueRangeError(
-            line_num, "nb_drones", "should be a positive integer"
-        )
+        raise ValueRangeError(line_num, "nb_drones", "should be a positive integer")
     attribute_dict = _get_attribute(attrb, line_num, state)
     return ParseUpdate(
         target=ConfigKeyWords.ZONE,
@@ -491,14 +485,15 @@ def _get_zone_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
                 "zone_role": role,
                 ConfigKeyWords.NAME: name,
                 "position": Position(x=x, y=y),
-            } | attribute_dict
+            }
+            | attribute_dict
         ),
         line_num=line_num,
     )
 
 
 def _get_attribute(
-        atrbt: str, line_num: int, state: ParseState | None = None
+    atrbt: str, line_num: int, state: ParseState | None = None
 ) -> dict[str, Any]:
     """Parse the bracketed attribute section of a hub line.
 
@@ -519,9 +514,12 @@ def _get_attribute(
     """
     if state is None:
         state = ParseState(
-            zones=[], zone_names=set(),
-            connections={}, connection_seen=set(), nb_drones=0,
+            zones=[],
+            zone_names=set(),
+            connections={},
+            connection_seen=set(),
             connection_lines={},
+            nb_drones=0,
         )
     attribute_dict: dict[str, Any] = {}
     a_zone = 0
@@ -568,9 +566,7 @@ def _get_color(line: str, line_num: int, state: ParseState) -> ParseUpdate:
 
 
 @register_exporter("zone")
-def _get_zone_atrbt(
-    line: str, line_num: int, state: ParseState
-) -> ParseUpdate:
+def _get_zone_atrbt(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     """Parse a ``zone=<type>`` attribute.
 
     Validates the zone type against the allowed values (e.g.
@@ -597,9 +593,7 @@ def _get_zone_atrbt(
 
 
 @register_exporter("max_drones")
-def _get_max_drone_nb(
-    line: str, line_num: int, state: ParseState
-) -> ParseUpdate:
+def _get_max_drone_nb(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     """Parse a ``max_drones=<n>`` attribute.
 
     Args:
@@ -617,24 +611,16 @@ def _get_max_drone_nb(
     try:
         nb_drones = int(nb_drone)
     except (TypeError, ValueError):
-        raise ValueRangeError(
-            line_num, "max_drones", "should be positive integer"
-        )
+        raise ValueRangeError(line_num, "max_drones", "should be positive integer")
     if nb_drones < 0:
-        raise ValueRangeError(
-            line_num, "max_drones", "should be positive integer"
-        )
+        raise ValueRangeError(line_num, "max_drones", "should be positive integer")
     return ParseUpdate(
-        target=ConfigKeyWords.ZONE,
-        data={"max_drones": nb_drones},
-        line_num=line_num
+        target=ConfigKeyWords.ZONE, data={"max_drones": nb_drones}, line_num=line_num
     )
 
 
 @register_exporter(ConfigKeyWords.CONNECTION)
-def _get_connection_info(
-    line: str, line_num: int, state: ParseState
-) -> ParseUpdate:
+def _get_connection_info(line: str, line_num: int, state: ParseState) -> ParseUpdate:
     """Parse a ``connection: <a>-<b> [..]`` line.
 
     Handles both the bare ``<a>-<b>`` form and the form with a trailing
@@ -659,9 +645,7 @@ def _get_connection_info(
         infos = _check_connection_format(line_num, info, state)
         return ParseUpdate(
             target=ConfigKeyWords.CONNECTION,
-            data={
-                ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]
-            },
+            data={ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]},
             line_num=line_num,
         )
     info, _, attrbt = info.partition(" [")  # with attributes
@@ -669,17 +653,14 @@ def _get_connection_info(
     attribute = _get_connection_attribute(attrbt, line_num, state)
     return ParseUpdate(
         target=ConfigKeyWords.CONNECTION,
-        data=({
-            ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]
-        } | attribute
+        data=(
+            {ConfigKeyWords.ORIGIN: infos[0], ConfigKeyWords.TO: infos[1]} | attribute
         ),
         line_num=line_num,
     )
 
 
-def _check_connection_format(
-    line_num: int, info: str, state: ParseState
-) -> list[str]:
+def _check_connection_format(line_num: int, info: str, state: ParseState) -> list[str]:
     """Validate the ``<a>-<b>`` endpoint part of a connection.
 
     Args:
@@ -697,19 +678,17 @@ def _check_connection_format(
     """
     infos = info.split("-")
     if len(infos) != 2:
-        raise ConnectionFormatError(
-            line_num, "Connection format error"
-        )
-    if not all(con_name in state.zone_names for con_name in infos):
-        raise ConnectionFormatError(
-            line_num,
-            "Connection name error: name doesn't match existing zone names"
-        )
+        raise ConnectionFormatError(line_num, "Connection format error")
+    # if not all(con_name in state.zone_names for con_name in infos):
+    #     raise ConnectionFormatError(
+    #         line_num,
+    #         "Connection name error: name doesn't match existing zone names"
+    #     )
     return infos
 
 
 def _get_connection_attribute(
-        line: str, line_num: int, state: ParseState
+    line: str, line_num: int, state: ParseState
 ) -> dict[str, str]:
     """Parse the ``max_link_capacity=<n>`` attribute of a connection.
 
@@ -729,15 +708,14 @@ def _get_connection_attribute(
     title, _, max_num = zones.partition("=")
     if title != "max_link_capacity":
         raise ConnectionFormatError(
-            line_num, "Attribute spelling error, "
-            "it should be 'max_link_capacity=<int>'")
+            line_num, "Attribute spelling error, it should be 'max_link_capacity=<int>'"
+        )
     try:
         capacity = int(max_num)
     except ValueError:
-        raise ConnectionFormatError(
-            line_num, "max_link_capacity must be an integer"
-        )
+        raise ConnectionFormatError(line_num, "max_link_capacity must be an integer")
     if capacity < 1:
-        raise ConnectionFormatError(line_num, "max_link_capacity "
-                                    "should be greater than or equal to 1")
+        raise ConnectionFormatError(
+            line_num, "max_link_capacity should be greater than or equal to 1"
+        )
     return {title: max_num}

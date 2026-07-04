@@ -12,6 +12,7 @@ class Connection(BaseModel):
         extra_step: Whether traversing this link costs an additional step.
             Defaults to False.
     """
+
     name: str
     origin: str
     to: str

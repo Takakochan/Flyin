@@ -7,6 +7,7 @@ from collections import defaultdict
 
 class GraphValidationError(Exception):
     """Base class for errors raised while validating a graph."""
+
     pass
 
 
@@ -17,6 +18,7 @@ class StartMissingError(GraphValidationError):
     Attributes:
         detail: Human-readable description of the problem.
     """
+
     detail: str
 
     def __str__(self) -> str:
@@ -30,6 +32,7 @@ class EndMissingError(GraphValidationError):
     Attributes:
         detail: Human-readable description of the problem.
     """
+
     detail: str
 
     def __str__(self) -> str:
@@ -49,6 +52,7 @@ class Graph(BaseModel):
         adjacency: Undirected neighbour list per zone name, populated by
             :meth:`make_adjencency`.
     """
+
     zones: dict[str, Zone]
     connections: dict[str, Connection]
     nb_drone: int = 0
@@ -96,9 +100,7 @@ class Graph(BaseModel):
         for _, zone in self.zones.items():
             if zone.zone_type == ZoneType.RESTRICTED:
                 conne = next(
-                    (c for c in self.connections.values()
-                     if c.to == zone.name),
-                    None
+                    (c for c in self.connections.values() if c.to == zone.name), None
                 )
                 if conne is not None:
                     conne.extra_step = True
@@ -111,13 +113,9 @@ class Graph(BaseModel):
             StartMissingError: If no zone has the start role.
             EndMissingError: If no zone has the end role.
         """
-        if not any(
-            zone.zone_role == ZoneRole.START for zone in self.zones.values()
-        ):
+        if not any(zone.zone_role == ZoneRole.START for zone in self.zones.values()):
             raise StartMissingError("Zone role 'start_hub' is missing")
-        if not any(
-            zone.zone_role == ZoneRole.END for zone in self.zones.values()
-        ):
+        if not any(zone.zone_role == ZoneRole.END for zone in self.zones.values()):
             raise EndMissingError("Zone role 'end_hub' is missing")
 
     def _zero_drone_case(self) -> None:
