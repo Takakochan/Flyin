@@ -1,49 +1,68 @@
-_This project has been created as part of the 42 curriculum by tkunugi._
+# Fly-In 🚁
 
-# Description
+**Multi-drone routing simulator** — pathfinding and conflict resolution for fleets of drones navigating a shared network of zones, built for the 42 common core curriculum.
 
-42 Next common core Python project.
-Design an efficient drone routing system that navigates multiple drones
-through connected zones while minimizing simulation turns and handling movement
-constraints.
+![Python](https://img.shields.io/badge/python-3.13-blue?logo=python&logoColor=white)
+![Plotly](https://img.shields.io/badge/visualization-Plotly-3f4f75?logo=plotly&logoColor=white)
+![42](https://img.shields.io/badge/42-common%20core-000000?logo=42&logoColor=white)
+![status](https://img.shields.io/badge/status-complete-success)
 
-# Instructions
-### Installation
+<p align="center">
+  <img src="assets/demo2.gif" alt="Fly-In interactive drone simulation demo — easy map" width="400">
+  <img src="assets/demo.gif" alt="Fly-In interactive drone simulation demo — hard map" width="400">
+</p>
+
+<p align="center"><em>Interactive Plotly visualization of drones navigating a shared zone network, with Conflict-Based Search resolving collisions and capacity constraints in real time.</em></p>
+
+> This project was created as part of the 42 curriculum by **tkunugi**.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Example](#example)
+- [Algorithm](#algorithm)
+  - [High-Level Solvers](#high-level-solvers)
+  - [Low-Level Planner: A\*](#low-level-planner-a)
+- [Visualization](#visualization)
+- [Tech Stack](#tech-stack)
+- [Resources](#resources)
+- [AI Usage](#ai-usage)
+
+---
+
+## Overview
+
+**Fly-In** designs an efficient drone routing system that navigates multiple drones through connected zones while minimizing simulation turns and handling real-world movement constraints: zone capacity, restricted connections, priority zones, and collision avoidance.
+
+Given a map of zones (hubs) and connections, the planner computes a conflict-free, turn-by-turn schedule for every drone from its start hub to its goal hub — and renders the result as an interactive, time-scrubbable graph.
+
+## Installation
+
 Create the virtual environment and install dependencies:
+
 ```bash
 make install
 ```
-### Run
-```bash
-make run
-```
-### Debug
-```bash
-make debug
-```
-### Tests
-```bash
-make test
-```
-### Lint check
-```bash
-make lint
-```
-### Strict lint checks
-```bash
-make lint-strict
-```
-### Clean project files
-```bash
-make clean
-```
-# Example
-### Input (`maps/easy/01_linear_path.txt`)
-```
-nb_drones: 2
 
-# Example
-### Input (`maps/easy/01_linear_path.txt`)
+## Usage
+
+| Command | Description |
+|---|---|
+| `make run` | Run the simulation |
+| `make debug` | Run with debug output |
+| `make test` | Run the test suite |
+| `make lint` | Run lint checks |
+| `make lint-strict` | Run strict lint checks |
+| `make clean` | Clean generated project files |
+
+## Example
+
+**Input** (`maps/easy/01_linear_path.txt`)
+
 ```
 nb_drones: 2
 
@@ -57,11 +76,9 @@ connection: waypoint1-waypoint2
 connection: waypoint2-goal
 ```
 
-Two drones start at `start` and must each reach `goal` through `waypoint1` and `waypoint2`.
-The link `start-waypoint1` has default capacity 1, so they cannot both enter `waypoint1` at the same time.
-CBS staggers their departure to avoid a conflict.
+Two drones start at `start` and must each reach `goal` through `waypoint1` and `waypoint2`. The link `start-waypoint1` has default capacity 1, so they cannot both enter `waypoint1` at the same time — CBS staggers their departure to avoid a conflict.
 
-### Output (`Drone_paths.txt`)
+**Output** (`Drone_paths.txt`)
 
 ```
 D2-waypoint1
@@ -70,124 +87,89 @@ D1-waypoint2 D2-goal
 D1-goal
 ```
 
-Each line represents one simulation turn.
-Only drones that moved are listed.
+Each line represents one simulation turn. Only drones that moved are listed.
 
-# Algorithm
+## Algorithm
+
 The project uses a two-level architecture.
 
-Objective:
-    minimize simulation turns
+> **Objective:** minimize simulation turns.
 
-## High-Level Solvers
+### High-Level Solvers
+
 Two different global planners are implemented:
-### 1. Conflict-Based Search (CBS)
-solve() implements Conflict-Based Search.
-The algorithm:
-computes an initial path for every drone using A\*;
-detects collisions between drones;
-creates a conflict tree node containing constraints;
-branches into two child nodes, each forbidding one of the conflicting drones from occupying the problematic zone at the given time;
-replans only the affected drone;
-repeats until no conflicts remain.
+
+**1. Conflict-Based Search (CBS)** — `solve()`
+
+- computes an initial path for every drone using A\*;
+- detects collisions between drones;
+- creates a conflict-tree node containing constraints;
+- branches into two child nodes, each forbidding one of the conflicting drones from occupying the problematic zone at the given time;
+- replans only the affected drone;
+- repeats until no conflicts remain.
 
 CBS produces near-optimal solutions while minimizing unnecessary replanning.
 
-### 2. Sequential Planner (Fallback)
+**2. Sequential Planner (Fallback)** — `solve2()`
 
-solve2() is used as a fallback strategy when CBS exceeds the iteration limit.
+Used as a fallback strategy when CBS exceeds the iteration limit. Drones are planned one after another:
 
-Drones are planned one after another.
+- previously planned paths are converted into an occupancy table;
+- zones that are already full are transformed into constraints;
+- A\* computes a path while avoiding those constraints.
 
-For each drone:
+Although less optimal than CBS, it is simpler and guarantees a feasible solution in difficult scenarios.
 
-previously planned paths are converted into an occupancy table;
-zones that are already full are transformed into constraints;
-A\* computes a path while avoiding those constraints.
+### Low-Level Planner: A\*
 
-Although this approach is less optimal than CBS, it is simpler and guarantees a feasible solution in difficult scenarios.
+Both high-level solvers rely on the same low-level path planner. A\* takes into account:
 
-## Low-Level Planner: A\*
-
-Both high-level solvers rely on the same low-level path planner.
-
-A\* takes into account:
-blocked zones;
-restricted connections with additional travel time;
-priority zones;
-waiting actions;
-time-dependent constraints generated by the high-level planner.
-
-#### (Although blocked zone never appears in provided maps, as well as normal zone. lol)
+- blocked zones;
+- restricted connections with additional travel time;
+- priority zones;
+- waiting actions;
+- time-dependent constraints generated by the high-level planner.
 
 The evaluation function is:
 
+```
 f(n) = g(n) + h(n) + extra_cost + priority_bonus
+```
 
-where:
-g(n) is elapsed time,
-h(n) is the heuristic distance to the goal,
-extra_cost models restricted connections,
-priority_bonus encourages the use of priority zones.
-
-
-### Heuristic Computation
+where `g(n)` is elapsed time, `h(n)` is the heuristic distance to the goal, `extra_cost` models restricted connections, and `priority_bonus` encourages the use of priority zones.
 
 Before running A\*, a reverse Breadth-First Search computes the minimum number of steps from every zone to the goal.
 
+## Visualization
 
-## Visual Representation
+The project includes an interactive visualization built with **Plotly** to explore simulation results.
 
-The project includes an interactive visualization built with Plotly to display the simulation results.
+**Features**
 
-### Features
+- zones rendered as colored nodes, with connections revealed on hover;
+- different zone types (normal, priority, restricted, blocked);
+- drone paths animated over time;
+- collisions and occupancy constraints highlighted;
+- waiting actions and delayed movements.
 
-The visualization represents:
+Colors follow the standard Plotly CSS color palette.
 
-* zones as colored nodes;
-* connections between zones as edges by hovering;
-* different zone types (normal, priority, restricted, blocked);
-* drone paths over time;
-* collisions and occupancy constraints;
-* waiting actions and delayed movements.
+Compared with textual output alone, the interactive map offers a faster, more intuitive way to analyze simulation results — it's especially useful for demonstrating how conflicts are resolved and how drones dynamically adapt their routes to reach their destination safely.
 
-### Color
+## Tech Stack
 
-Based on plotly CSS color
+- **Python 3.13**
+- [`pydantic`](https://docs.pydantic.dev/) — data validation
+- [`inquirer`](https://github.com/magmax/python-inquirer) — interactive CLI prompts
+- [`plotly`](https://plotly.com/python/) — interactive visualization
+- [`pyfiglet`](https://github.com/pwaller/pyfiglet) — ASCII banners
+- [`termcolor`](https://github.com/termcolor/termcolor) — colored terminal output
 
+## Resources
 
-### User Experience Benefits
+- [Plotly Docs](https://plotly.com/python/)
+- [Plotly example](https://data-analytics.fun/2021/06/12/plotly-line-scatter-details/)
 
-The graphical representation improves the understanding of the algorithm by:
+## AI Usage
 
-* providing an intuitive view of the map topology;
-* making drone trajectories easy to follow;
-* helping detect congestion and conflicts visually;
-* allowing debugging of path planning decisions;
-* illustrating the effects of zone capacities and additional movement costs;
-* making the behavior of Conflict-Based Search easier to understand.
-
-Compared with textual output alone, the interactive map offers a faster and more intuitive way to analyze simulation results.
-
-The visualization is particularly useful for demonstrating how conflicts are resolved and how drones dynamically adapt their routes to reach the destination safely.
-
-
-### Requirment
-inquirer,
-pydantic,
-plotly,
-pyfiglet,
-termcolor
-
-### Technical choices
-Plotly visualization
-
-### Resources
-[Plotly Docs](https://plotly.com/python/?_gl=1*1vksk6q*_gcl_au*MjAxMDA3MTQzMS4xNzgwNDE1NzQ4*_ga*NzA4NzMxMDYxLjE3ODExODk0ODQ.*_ga_6G7EE0JNSC*czE3ODIzMTE2MzYkbzMkZzEkdDE3ODIzMTE4MTIkajYwJGwwJGgw)
-
-[Plotly example](https://data-analytics.fun/2021/06/12/plotly-line-scatter-details/)
-
-### AI usage
-Edge cases,
-Test idea,
-English writing especially docstring.
+AI assistance was used for: edge-case identification, test ideas, and English writing (especially docstrings).
