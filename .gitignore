@@ -10,3 +10,8 @@ wheels/
 .venv
 maps
 Drone_paths.txt
+
+# Personal notes / scratch files
+memo.txt
+*.log
+.DS_Store
